@@ -1,0 +1,15 @@
+.gradle/
+/.cxx/
+.idea/
+local.properties
+/build/
+/app/build/
+/app/.cxx/
+*.iml
+*.apk
+*.aab
+*.gguf
+*.zim
+*.partial
+vendor/llama.cpp/
+LLAMA_CPP_COMMIT_USADO.txt

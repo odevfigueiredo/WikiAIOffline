@@ -1,0 +1,16 @@
+WIKIAI OFFLINE | COMPONENTES DE TERCEIROS
+
+- LFM2.5-350M Q4_K_M, da Liquid AI. Os pesos originais são incluídos no APK
+  sob a licença LFM 1.0. O APK inclui a íntegra dessa licença em
+  assets/built_in_model.LICENSE.txt. A licença contém condições próprias
+  de redistribuição e de uso comercial.
+  https://huggingface.co/LiquidAI/LFM2.5-350M-GGUF/tree/657e078c94084481950a2d555a941481f715536b
+- llama.cpp, sob a licença MIT. O projeto fixa a revisão e aplica patches
+  locais para a integração Android. https://github.com/ggml-org/llama.cpp
+- java-libkiwix, sob GPLv3 ou superior. Ao distribuir o APK que inclui
+  a biblioteca, observe as obrigações relativas ao código-fonte
+  correspondente. https://github.com/kiwix/java-libkiwix
+- Kotlin, Compose, AndroidX e as demais dependências permanecem sob
+  suas licenças próprias.
+- Os acervos ZIM são fornecidos pelo usuário. Os textos e imagens
+  do acervo possuem condições próprias de licença e atribuição.

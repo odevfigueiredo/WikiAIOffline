@@ -1,0 +1,62 @@
+diff --git a/examples/llama.android/lib/build.gradle.kts b/examples/llama.android/lib/build.gradle.kts
+index ae95f41..f5fc005 100644
+--- a/examples/llama.android/lib/build.gradle.kts
++++ b/examples/llama.android/lib/build.gradle.kts
+@@ -3,6 +3,9 @@ plugins {
+     alias(libs.plugins.jetbrains.kotlin.android)
+ }
+ 
++val wikiAbis = providers.gradleProperty("wikiAbis").orElse("arm64-v8a").get()
++    .split(',').map(String::trim).distinct()
++
+ android {
+     namespace = "com.arm.aichat"
+     compileSdk = 36
+@@ -16,13 +19,12 @@ android {
+         consumerProguardFiles("consumer-rules.pro")
+ 
+         ndk {
+-             abiFilters += listOf("arm64-v8a", "x86_64")
++            abiFilters += wikiAbis
+         }
+         externalNativeBuild {
+             cmake {
+                 arguments += "-DCMAKE_BUILD_TYPE=Release"
+-                arguments += "-DCMAKE_MESSAGE_LOG_LEVEL=DEBUG"
+-                arguments += "-DCMAKE_VERBOSE_MAKEFILE=ON"
++                arguments += "-DANDROID_STL=c++_shared"
+ 
+                 arguments += "-DBUILD_SHARED_LIBS=ON"
+                 arguments += "-DLLAMA_BUILD_APP=OFF"
+@@ -30,6 +32,7 @@ android {
+                 arguments += "-DLLAMA_OPENSSL=OFF"
+ 
+                 arguments += "-DGGML_NATIVE=OFF"
++                arguments += "-DGGML_OPENMP=OFF"
+                 arguments += "-DGGML_BACKEND_DL=ON"
+                 arguments += "-DGGML_CPU_ALL_VARIANTS=ON"
+                 arguments += "-DGGML_LLAMAFILE=OFF"
+@@ -43,6 +46,7 @@ android {
+         cmake {
+             path("src/main/cpp/CMakeLists.txt")
+             version = "3.31.6"
++            buildStagingDirectory = rootProject.file(".cxx/llama")
+         }
+     }
+     compileOptions {
+diff --git a/examples/llama.android/lib/src/main/cpp/CMakeLists.txt b/examples/llama.android/lib/src/main/cpp/CMakeLists.txt
+index 20c9e3b..d636097 100644
+--- a/examples/llama.android/lib/src/main/cpp/CMakeLists.txt
++++ b/examples/llama.android/lib/src/main/cpp/CMakeLists.txt
+@@ -20,11 +20,9 @@ if(DEFINED ANDROID_ABI)
+     if(ANDROID_ABI STREQUAL "arm64-v8a")
+         set(GGML_SYSTEM_ARCH "ARM")
+         set(GGML_CPU_KLEIDIAI ON)
+-        set(GGML_OPENMP ON)
+     elseif(ANDROID_ABI STREQUAL "x86_64")
+         set(GGML_SYSTEM_ARCH "x86")
+         set(GGML_CPU_KLEIDIAI OFF)
+-        set(GGML_OPENMP OFF)
+     else()
+         message(FATAL_ERROR "Unsupported ABI: ${ANDROID_ABI}")
+     endif()

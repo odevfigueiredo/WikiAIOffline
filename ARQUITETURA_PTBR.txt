@@ -1,0 +1,32 @@
+WIKIAI OFFLINE 0.6.0 | ARQUITETURA
+
+INTERFACE
+- MainActivity apresenta a abertura do ZIM, o título e a descrição do acervo,
+  a busca e o leitor das fontes originais.
+- WikiViewModel preserva a sessão em recriações de tela e mostra os trechos
+  antes de iniciar a síntese. A preferência por outro modelo fica nas
+  opções avançadas do acervo.
+
+ACERVO ZIM
+- MultiLibraryRepository tenta abrir o ZIM com autorização persistente pelo
+  seletor Android. Se o provedor não permitir, valida e copia o arquivo.
+- ZimRepository lê título, descrição, edição, data e idioma quando o arquivo
+  contém esses metadados. A identidade combina UUID do acervo e caminho
+  interno da entrada.
+- A busca usa índice de texto completo e títulos. O catálogo mantém os
+  metadados e reabre os arquivos sem repetir a seleção.
+
+IA INTEGRADA
+- O APK contém o LFM2.5 350M Q4_K_M, com versão e SHA-256 fixados no build.
+- ModelRepository carrega o modelo quando necessário. A compilação alinhada
+  permite mapear o arquivo no próprio APK. Há extração atômica de segurança
+  para instalações nas quais não se consegue abrir o asset diretamente.
+- A resposta curta recebe somente o trecho mais relevante. Os demais
+  resultados são exibidos como fontes navegáveis.
+- A tradução das palavras-chave é reservada à tentativa adicional quando
+  a busca inicial não encontra evidências e há acervo em inglês.
+
+ARMAZENAMENTO
+- Catálogo e histórico ficam privados. O histórico mantém até 100 mensagens.
+- O APK funciona sem a permissão INTERNET. O seletor trabalha com arquivos
+  do aparelho. Os downloads de acervos são feitos previamente.

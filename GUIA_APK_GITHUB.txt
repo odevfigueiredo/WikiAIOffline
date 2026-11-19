@@ -1,0 +1,13 @@
+WIKIAI OFFLINE 0.6.0 | COMPILAÇÃO NO GITHUB ACTIONS
+
+1. Envie os arquivos de fonte para a raiz de um repositório Git.
+   Inclua .github/, gradle/, patches/ e os scripts de preparação.
+2. Abra Actions e selecione WikiAI Offline - Compilar APK Android.
+3. Execute Run workflow. O fluxo obtém o modelo fixado, verifica sua
+   integridade, roda os testes e o Lint e compila o APK ARM64 offline
+   para uso no aparelho.
+4. Baixe o artefato WikiAI-Offline-v0.6.0-ARM64-debug-APK. O APK alinhado
+   está assinado para teste. Instale-o no Android 13 ou superior, ARM64.
+
+Consulte LICENCAS_E_FONTE.txt para distribuir o aplicativo e README.md
+para a compilação local.

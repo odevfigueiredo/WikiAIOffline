@@ -1,0 +1,34 @@
+WIKIAI OFFLINE 0.6.0 | VERIFICAÇÃO EM 19/11/2026
+
+SUÍTES E MODELO
+- As suítes Kotlin de busca bilíngue e resposta a partir de uma fonte
+  passaram. O build Android usa as mesmas verificações em dois testes JUnit.
+- O backend ZIM compilou com SDK 36 e libkiwix 2.6.0. Foram verificados
+  título ausente, descrição, data, limites e higienização dos metadados.
+- O carregador foi exercitado isoladamente com carga sob demanda,
+  reaproveitamento, falha de integridade, cancelamento, extração e
+  recuperação após falha no acesso direto.
+- No PC, o LFM2.5 350M respondeu água e dióxido de carbono ao prompt
+  do aplicativo baseado no trecho em inglês. O teste usou um acervo
+  sintético, com os dois termos confirmados no texto original.
+
+VARREDURA
+- A primeira instalação de teste revelou que a ausência de uma descrição
+  podia fazer o leitor nativo lançar uma exceção. A leitura dos metadados
+  passou a consultar as chaves existentes e tratar os campos opcionais.
+- O modelo vem no APK como um asset de 229.312.224 bytes, sem compressão.
+  O build verifica o SHA-256 e mantém o alinhamento ao assinar.
+- A tarefa de entrega usa o alinhamento de 64 bytes para o modelo, com
+  verificação da assinatura. O APK ARM64 não requer permissão INTERNET.
+- Gradle em modo offline aprovou a montagem, dois testes JUnit e o
+  Android Lint, com zero erros e 35 avisos. As 19 bibliotecas ARM64
+  passaram nas verificações de dependências e alinhamento de 16 KiB.
+
+APK ARM64
+- Arquivo app/build/outputs/apk/offline/WikiAI-Offline-v0.6.0-arm64-v8a-debug.apk.
+- 306.026.094 bytes. Assinatura de depuração, ABI e integridade verificadas.
+- SHA-256 527D87C654DAB9E20605EF31F5D945C124521370D21A91A3683644E27CA9BA1F
+
+COBERTURA
+- Desempenho em celular físico e acervos de vários gigabytes ainda
+  exigem medição no aparelho de uso.

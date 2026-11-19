@@ -1,0 +1,15 @@
+WIKIAI OFFLINE 0.6.0 | INSTRUÇÕES
+
+1. Instale o APK ARM64 em um aparelho com Android 13 ou superior.
+2. Toque em Abrir arquivo ZIM. Selecione um ZIM da Wikipédia ou de outro
+   acervo compatível que já esteja no aparelho. Se o Android exigir,
+   o aplicativo fará uma cópia e mostrará o progresso.
+3. Confira o título e a descrição do acervo. Se esses dados não estiverem
+   no ZIM, o app usa o nome do arquivo para identificar o acervo.
+4. Faça uma pergunta em português. A busca mostra os trechos e a IA que
+   vem incluída no APK prepara uma resposta curta.
+5. Toque numa referência para ler o conteúdo original. Os trechos
+   continuam disponíveis quando a síntese não está disponível.
+
+Use o README.md para compilar o projeto e TEST_REPORT.txt para consultar
+os resultados de verificação desta versão.

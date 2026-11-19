@@ -1,0 +1,84 @@
+name: Compilar e testar WikiAI Offline
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    name: Testes e APK offline (ARM64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Buscar código
+        uses: actions/checkout@v4
+
+      - name: Configurar Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Configurar Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Configurar Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Instalar SDK 36, NDK 29 e CMake 3.31.6
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager --install \
+            'platforms;android-36' \
+            'build-tools;36.0.0' \
+            'ndk;29.0.13113456' \
+            'cmake;3.31.6'
+
+      - name: Preparar motor de IA
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash PREPARAR_IA_LINUX_MAC.sh
+
+      - name: Executar testes, Lint e compilar APK offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash ./gradlew --no-daemon \
+            :app:testDebugUnitTest \
+            :app:lintDebug \
+            :app:assembleOfflineDebug
+
+      - name: Verificar arquivo e assinatura do APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk='app/build/outputs/apk/offline/WikiAI-Offline-v0.6.0-arm64-v8a-debug.apk'
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [[ -z "$sdk" ]]; then
+            echo 'Android SDK não encontrado: ANDROID_HOME/ANDROID_SDK_ROOT ausentes.' >&2
+            exit 1
+          fi
+          test -s "$apk"
+          "$sdk/build-tools/36.0.0/apksigner" verify --verbose "$apk"
+          echo 'SHA-256 do APK:'
+          sha256sum "$apk"
+          echo 'Tamanho do APK:'
+          du -h "$apk"
+
+      - name: Publicar APK de testes
+        uses: actions/upload-artifact@v4
+        with:
+          name: wikiai-offline-v0.6.0-arm64-debug-apk
+          path: app/build/outputs/apk/offline/WikiAI-Offline-v0.6.0-arm64-v8a-debug.apk
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
