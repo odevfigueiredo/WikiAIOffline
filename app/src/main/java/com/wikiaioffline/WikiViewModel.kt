@@ -285,7 +285,7 @@ class WikiViewModel(application: Application) : AndroidViewModel(application) {
                     .collect { buffer.append(it) }
                 buffer.toString()
             }
-            val validated = generated?.let(WikiRag::answerForSingleSource)
+            val validated = generated?.let { WikiRag.answerForSingleSource(it, question) }
             when {
                 validated != null -> validated
                 generated == null -> "A IA excedeu o tempo de resposta.\n\n$fallback"

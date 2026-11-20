@@ -43,7 +43,7 @@ fun checkBilingual() {
     val english = chosen.single { it.language == "en" }
     val prompt = WikiRag.makeBriefPrompt("Por que caiu Roma?", english)
     check(prompt.contains("Trecho em inglês: ${english.excerpt}"))
-    check(prompt.contains("uma frase em português do Brasil"))
+    check(prompt.contains("uma única frase em português brasileiro"))
     check(chosen.single { it.language == "pt" }.excerpt !in prompt)
     val raw = WikiRag.extractive(chosen)
     check(raw.contains("as fontes em inglês aparecem no idioma original"))

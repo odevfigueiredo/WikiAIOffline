@@ -12,10 +12,33 @@ SUÍTES E MODELO
   do aplicativo baseado no trecho em inglês. O teste usou um acervo
   sintético, com os dois termos confirmados no texto original.
 
+ANDROID EM MODO AVIÃO
+- A instalação limpa no emulador Android 16 x86_64 abriu o acervo EN
+  Classroom Science com um único uso do seletor. O Android exigiu
+  cópia local e o app salvou título, descrição, edição e data do ZIM.
+- O app abriu a fonte Photosynthesis pelo botão de referência e mostrou
+  seu texto original. Um ZIM sem título passou a exibir o nome do
+  arquivo, sua descrição curta e edição. A data inválida foi omitida.
+- O modelo começou a carregar na primeira pergunta. O log confirmou
+  leitura direta do APK via mmap e a pasta de cópia do modelo continuou
+  ausente. O Android informou que não havia rede padrão ativa.
+- Após instalação limpa, o app respondeu em português que a
+  fotossíntese utiliza água e dióxido de carbono, com [1], usando
+  apenas o ZIM em inglês. As substâncias conferem com a fonte.
+- O APK ARM64 de entrega preservou o catálogo e o histórico ao substituir
+  a compilação x86_64 no mesmo emulador. Executado por tradução de ABI,
+  o ARM64 mapeou o modelo diretamente e respondeu à mesma pergunta em
+  português com as duas substâncias e [1]. O log registrou cerca de 27 s
+  entre modelo pronto e geração concluída nesse cenário de emulação.
+
 VARREDURA
 - A primeira instalação de teste revelou que a ausência de uma descrição
   podia fazer o leitor nativo lançar uma exceção. A leitura dos metadados
   passou a consultar as chaves existentes e tratar os campos opcionais.
+- Uma pergunta com "segundo o trecho" gerava um termo extra em inglês
+  que impedia a busca. O ajuste foi retestado na pergunta com esse
+  complemento. Respostas que repetem a pergunta ou saem do formato
+  esperado voltam para os trechos originais.
 - O modelo vem no APK como um asset de 229.312.224 bytes, sem compressão.
   O build verifica o SHA-256 e mantém o alinhamento ao assinar.
 - A tarefa de entrega usa o alinhamento de 64 bytes para o modelo, com
@@ -27,8 +50,10 @@ VARREDURA
 APK ARM64
 - Arquivo app/build/outputs/apk/offline/WikiAI-Offline-v0.6.0-arm64-v8a-debug.apk.
 - 306.026.094 bytes. Assinatura de depuração, ABI e integridade verificadas.
-- SHA-256 527D87C654DAB9E20605EF31F5D945C124521370D21A91A3683644E27CA9BA1F
+- SHA-256 F10517E68D8B5E2ED6D07AB3D1B5D2F28C32536964EA3AF5A1FAD5F8170E27C5
 
 COBERTURA
 - Desempenho em celular físico e acervos de vários gigabytes ainda
   exigem medição no aparelho de uso.
+- A associação ao trecho permite conferir a resposta. Perguntas abertas
+  ainda podem resultar em omissões ou detalhes além do texto original.

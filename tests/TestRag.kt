@@ -10,9 +10,9 @@ fun checkRag() {
       ArticleEvidence("Crise do terceiro século","A/crise", "A crise influenciou mudanças", "wikipedia_pt.zim"))
     val p = WikiRag.makeBriefPrompt("Por que caiu o Império?", e.first().copy(language = "en"))
     check(p.contains("Trecho em inglês: Um fato verificado"))
-    check(p.contains("Pergunta em português: Por que caiu o Império?"))
+    check(p.contains("Pergunta: Por que caiu o Império?"))
     check("A crise influenciou mudanças" !in p)
-    check(p.endsWith("Resposta em português:"))
+    check(p.endsWith("Escreva só a resposta final, sem rótulo."))
     check(WikiRag.extractive(e).contains("[2] Crise do terceiro século"))
     check(WikiRag.extractive(e, excerptLimit = 5).contains("Um fa…"))
     val marked = WikiRag.makeBriefPrompt(
@@ -28,6 +28,9 @@ fun checkRag() {
     check(WikiRag.answerForSingleSource("Resposta em português do Brasil: \"Água e dióxido de carbono.\"") ==
         "Água e dióxido de carbono. [1]")
     check(WikiRag.answerForSingleSource("Resposta em português:") == null)
+    check(WikiRag.answerForSingleSource("DOIs: CSPMD\n\nFrase em português: resposta indevida.") == null)
+    check(WikiRag.answerForSingleSource("Fotossíntese", "O que é fotossíntese?") == null)
+    check(WikiRag.answerForSingleSource("Paris", "Qual a capital da França?") == "Paris [1]")
     check(WikiRag.answerForSingleSource("Uma frase [1] [3].") == null)
     check(WikiRag.answerForSingleSource("Uma frase [1, 2].") == null)
     check(WikiRag.answerForSingleSource("Uma frase [1] [2–9].") == null)
