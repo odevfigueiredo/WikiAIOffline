@@ -31,6 +31,7 @@ fun checkRag() {
     check(WikiRag.answerForSingleSource("DOIs: CSPMD\n\nFrase em português: resposta indevida.") == null)
     check(WikiRag.answerForSingleSource("Fotossíntese", "O que é fotossíntese?") == null)
     check(WikiRag.answerForSingleSource("Paris", "Qual a capital da França?") == "Paris [1]")
+    check(WikiRag.answerForSingleSource("1905", "Em que ano aconteceu?") == "1905 [1]")
     check(WikiRag.answerForSingleSource("Uma frase [1] [3].") == null)
     check(WikiRag.answerForSingleSource("Uma frase [1, 2].") == null)
     check(WikiRag.answerForSingleSource("Uma frase [1] [2–9].") == null)

@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0a1420">
+  <meta name="color-scheme" content="dark">
+  <title>WikiAI Offline | Acesso local</title>
+  <link rel="stylesheet" href="/app.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <section id="pair-screen" class="pair-screen" aria-labelledby="pair-title">
+    <div class="pair-illustration">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span>WikiAI <span class="brand-offline">Offline</span></span>
+      </div>
+    </div>
+    <main class="pair-main">
+      <div class="pair-card">
+        <div class="mobile-brand brand">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <span>WikiAI <span class="brand-offline">Offline</span></span>
+        </div>
+        <h1 id="pair-title">Conecte ao WikiAI Offline</h1>
+        <p>No Android, abra <strong>Acesso pela rede</strong>, toque em <strong>Ativar acesso local</strong> e digite aqui o código de oito dígitos.</p>
+        <form id="pair-form" class="pair-form">
+          <label for="pair-code">Código de acesso</label>
+          <input id="pair-code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code"
+                 aria-describedby="pair-status" maxlength="12" pattern="[0-9]{8}" placeholder="00000000" required>
+          <button id="pair-submit" class="button button-primary" type="submit" disabled>Conectar <span aria-hidden="true">→</span></button>
+          <p id="pair-status" class="status pair-status" role="status">Verificando a sessão…</p>
+        </form>
+        <noscript><p>Ative o JavaScript no navegador para conectar e consultar o acervo.</p></noscript>
+      </div>
+    </main>
+  </section>
+
+  <div id="workspace" class="workspace" hidden>
+    <aside class="sidebar">
+      <div class="brand sidebar-brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span>WikiAI <span class="brand-offline">Offline</span></span>
+      </div>
+      <nav class="navigation" aria-label="Painel local">
+        <button type="button" class="nav-button" data-panel="library" aria-controls="library-panel" aria-current="page">
+          <span class="icon icon-library" aria-hidden="true"></span> Biblioteca
+        </button>
+        <button type="button" class="nav-button" data-panel="search" aria-controls="search-panel">
+          <span class="icon icon-search" aria-hidden="true"></span> Pesquisa
+        </button>
+      </nav>
+      <div class="sidebar-end">
+        <span class="connection"><span aria-hidden="true"></span> Rede local</span>
+        <button id="logout" type="button" class="button button-quiet">Sair</button>
+      </div>
+    </aside>
+
+    <main id="workspace-main" class="workspace-main" tabindex="-1">
+      <p id="workspace-status" class="status workspace-status" role="status"></p>
+      <section id="library-panel" aria-labelledby="library-title">
+        <div class="library-hero">
+          <div class="hero-content">
+            <h1 id="library-title" tabindex="-1">Biblioteca offline</h1>
+            <p>Consulte os acervos do seu Android e abra as fontes em qualquer dispositivo conectado a esta rede.</p>
+            <button type="button" class="button button-primary" data-panel="search">Pesquisar no acervo <span aria-hidden="true">→</span></button>
+          </div>
+        </div>
+        <section class="library-section" aria-labelledby="catalog-heading">
+          <div class="section-heading">
+            <div>
+              <h2 id="catalog-heading">Acervos ZIM</h2>
+              <p id="catalog-summary">Carregando acervos…</p>
+            </div>
+            <button type="button" id="refresh-catalog" class="button button-secondary">Atualizar</button>
+          </div>
+          <p id="catalog-status" class="status" role="status"></p>
+          <div id="catalog" class="catalog-grid" aria-busy="true"></div>
+          <p class="catalog-tip">Adicione novos arquivos ZIM pelo aplicativo Android.</p>
+        </section>
+      </section>
+
+      <section id="search-panel" aria-labelledby="search-title" hidden>
+        <div class="search-intro">
+          <h1 id="search-title" tabindex="-1">Pesquisar no acervo</h1>
+          <p>Encontre trechos nos ZIMs e consulte o artigo de origem.</p>
+        </div>
+        <form id="search-form" class="search-form">
+          <label for="search-query">Pergunta ou assunto</label>
+          <div class="search-input-row">
+            <input id="search-query" name="query" type="search" placeholder="Ex.: como funciona a fotossíntese?"
+                   maxlength="600" autocomplete="off" required>
+            <button id="search-submit" class="button button-primary" type="submit">Pesquisar</button>
+          </div>
+          <label class="checkbox"><input id="include-english" name="include-english" type="checkbox" checked> Incluir acervos em inglês</label>
+        </form>
+        <p id="search-status" class="status search-status" role="status"></p>
+
+        <section id="results-section" class="results-section" aria-labelledby="results-title" hidden>
+          <div class="section-heading results-heading">
+            <div>
+              <h2 id="results-title">Fontes encontradas</h2>
+              <p id="results-summary"></p>
+            </div>
+            <button id="generate-answer" class="button button-secondary" type="button" hidden>Gerar resposta com IA</button>
+          </div>
+          <section id="answer-panel" class="answer-panel" aria-labelledby="answer-title" hidden>
+            <h3 id="answer-title" tabindex="-1">Resposta com IA local</h3>
+            <p id="answer-text" class="multiline"></p>
+          </section>
+          <div id="search-notices" class="search-notices" hidden></div>
+          <ol id="source-list" class="source-list"></ol>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="article-dialog" class="dialog article-dialog" aria-labelledby="article-title">
+    <div class="dialog-header">
+      <h2 id="article-title">Fonte</h2>
+      <form method="dialog"><button class="button button-secondary" type="submit">Fechar</button></form>
+    </div>
+    <div class="article-body">
+      <p id="article-status" class="status" role="status"></p>
+      <p id="article-text" class="multiline"></p>
+    </div>
+  </dialog>
+  <dialog id="remove-dialog" class="dialog remove-dialog" aria-labelledby="remove-title" aria-describedby="remove-message">
+    <h2 id="remove-title">Remover acervo?</h2>
+    <p id="remove-message"></p>
+    <p id="remove-status" class="status" role="status"></p>
+    <form id="remove-form" class="dialog-actions">
+      <button id="remove-cancel" type="button" class="button button-secondary" autofocus>Cancelar</button>
+      <button id="remove-confirm" type="submit" class="button button-danger">Remover acervo</button>
+    </form>
+  </dialog>
+</body>
+</html>

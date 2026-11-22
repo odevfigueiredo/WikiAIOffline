@@ -1,4 +1,4 @@
-WIKIAI OFFLINE 0.6.0 | ARQUITETURA
+WIKIAI OFFLINE 0.7.0 | ARQUITETURA
 
 INTERFACE
 - MainActivity apresenta a abertura do ZIM, o título e a descrição do acervo,
@@ -25,8 +25,20 @@ IA INTEGRADA
   resultados são exibidos como fontes navegáveis.
 - A tradução das palavras-chave é reservada à tentativa adicional quando
   a busca inicial não encontra evidências e há acervo em inglês.
+- WikiQueryEngine compartilha a busca e a síntese entre app e painel.
+
+PAINEL LOCAL
+- LanNetwork seleciona um IPv4 privado em Wi-Fi ou Ethernet. LanHttpServer
+  abre um servidor HTTP nesse endereço apenas quando o usuário ativa o
+  acesso. O painel é servido a partir dos arquivos em assets/lan/.
+- Um código temporário associa cada navegador a uma sessão. Renovar o
+  código revoga todas as sessões. O painel é encerrado ao sair do app
+  ou quando o endereço que atende a rede deixa de estar disponível.
+- LanCatalogBackend consulta o mesmo acervo e modelo. O navegador recebe
+  os dados do catálogo, dos trechos e das fontes em texto. A inclusão de
+  novos arquivos usa o seletor Android.
 
 ARMAZENAMENTO
 - Catálogo e histórico ficam privados. O histórico mantém até 100 mensagens.
-- O APK funciona sem a permissão INTERNET. O seletor trabalha com arquivos
-  do aparelho. Os downloads de acervos são feitos previamente.
+- A permissão INTERNET permite o servidor HTTP local opcional. A pesquisa
+  e a IA usam os arquivos do aparelho, inclusive sem uma rede disponível.

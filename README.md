@@ -4,7 +4,7 @@
   <p><strong>Consulte acervos ZIM em português e inglês e obtenha respostas com inteligência artificial executada diretamente no Android.</strong></p>
   <p>
     <img src="https://img.shields.io/badge/Status-Em_desenvolvimento-2563EB?style=for-the-badge" alt="Projeto em desenvolvimento" />
-    <img src="https://img.shields.io/badge/Vers%C3%A3o-0.6.0-0D9488?style=for-the-badge" alt="Versão 0.6.0" />
+    <img src="https://img.shields.io/badge/Vers%C3%A3o-0.7.0-0D9488?style=for-the-badge" alt="Versão 0.7.0" />
     <img src="https://img.shields.io/badge/Android-13%2B-3DDC84?style=for-the-badge&amp;logo=android&amp;logoColor=white" alt="Android 13 ou superior" />
     <img src="https://img.shields.io/badge/Arquitetura-ARM64-2563EB?style=for-the-badge" alt="Arquitetura ARM64" />
     <img src="https://img.shields.io/badge/IA-No_dispositivo-0F766E?style=for-the-badge" alt="Inteligência artificial no dispositivo" />
@@ -13,7 +13,8 @@
   <p>
     <a href="https://github.com/odevfigueiredo/WikiAIOffline/actions/workflows/build-apk.yml">APK de teste</a> ·
     <a href="./INSTRUCOES_PTBR.txt">Guia rápido</a> ·
-    <a href="./TEST_REPORT.txt">Relatório de testes</a>
+    <a href="#-galeria">Galeria</a> ·
+    <a href="./docs/ACESSO_LOCAL.md">Pesquisa e validação</a>
   </p>
 </div>
 
@@ -23,9 +24,9 @@
 
 O **WikiAI Offline** é um aplicativo Android para pesquisar conteúdos de arquivos **ZIM** sem depender de uma conexão com a internet. Ele combina a consulta a acervos locais em português e inglês com um modelo de linguagem executado no próprio dispositivo.
 
-Na versão **0.6.0**, o APK para **ARM64** já inclui os pesos do modelo multilíngue **LFM2.5 350M**. Os arquivos ZIM são adicionados separadamente pelo usuário, permitindo escolher quais bibliotecas manter no aparelho.
+O APK para **ARM64** inclui o modelo multilíngue **LFM2.5 350M**. Instale o aplicativo, abra um arquivo ZIM e pesquise. O modelo já está pronto para uso e é carregado na primeira consulta que precisa de geração.
 
-A IA prepara uma resposta curta usando o trecho mais relevante dos acervos abertos. As referências permitem conferir os resultados no texto original.
+Na versão **0.7.0**, o mesmo acervo e a IA ficam disponíveis em um painel para outros dispositivos na rede local. O Android continua responsável pela busca, pela leitura dos arquivos e pela geração das respostas.
 
 > A utilização dos acervos e do modelo é local. A obtenção inicial dos arquivos ZIM e das dependências de compilação pode exigir acesso à internet.
 
@@ -43,6 +44,7 @@ A IA prepara uma resposta curta usando o trecho mais relevante dos acervos abert
 - **Catálogo e histórico locais:** os dados de uso permanecem armazenados no dispositivo.
 - **Modelos personalizados:** gerenciamento de modelo já instalado em **Acervo offline → Opções avançadas**.
 - **Tratamento de acesso a arquivos:** cópia automática do ZIM, com progresso, quando o Android não permite manter o acesso direto ao arquivo selecionado.
+- **Painel web opcional:** pareamento por código, consulta ao catálogo, busca, síntese local, leitura das fontes e remoção de um acervo do catálogo com confirmação. O painel se adapta a computadores e celulares.
 
 ---
 
@@ -64,10 +66,12 @@ A IA prepara uma resposta curta usando o trecho mais relevante dos acervos abert
 
 ### 1. Instale o aplicativo
 
-Instale o APK em um smartphone ou tablet **ARM64** com **Android 13 ou superior**. O pacote `offline` de teste tem **306 MB** e já incorpora o modelo de linguagem para a geração local.
+Instale o APK em um smartphone ou tablet **ARM64** com **Android 13 ou superior**. O pacote `offline` de teste tem cerca de **307 MB** e já incorpora o modelo de linguagem para a geração local.
 
-1. Entre na sua conta do GitHub e abra uma execução concluída com sucesso. [GitHub Actions do WikiAI Offline](https://github.com/odevfigueiredo/WikiAIOffline/actions/workflows/build-apk.yml)
-2. Em **Artifacts**, baixe `wikiai-offline-v0.6.0-arm64-debug-apk` e extraia o APK.
+Quando o build da versão 0.7.0 estiver disponível no GitHub Actions, siga os passos abaixo. A seção **Compilação** mostra como gerar o APK localmente.
+
+1. Entre na sua conta do GitHub e abra uma execução da versão 0.7.0 concluída com sucesso. [GitHub Actions do WikiAI Offline](https://github.com/odevfigueiredo/WikiAIOffline/actions/workflows/build-apk.yml)
+2. Em **Artifacts**, baixe `wikiai-offline-v0.7.0-arm64-debug-apk` e extraia o APK.
 3. Transfira o APK para o aparelho e instale-o.
 
 O GitHub Actions mantém esse artefato por **14 dias**. A seção de compilação explica como gerar uma cópia local.
@@ -90,9 +94,50 @@ O GitHub Actions mantém esse artefato por **14 dias**. A seção de compilaçã
 
 A marcação **[1]** identifica a fonte do trecho enviado à IA. Os demais resultados permanecem disponíveis para leitura.
 
-### 4. Gerencie o modelo
+### 4. Abra o painel em outro dispositivo
+
+1. Conecte o Android e o dispositivo cliente à mesma rede privada, como o Wi-Fi doméstico. O Android também aceita Ethernet com endereço IPv4 privado.
+2. Toque no ícone **Acesso pela rede** no WikiAI Offline e em **Ativar acesso local**.
+3. No outro dispositivo, leia o QR ou digite o endereço `http://` exibido. Informe o código de oito dígitos em até cinco minutos.
+4. No navegador, use **Pesquisar** para ver as fontes e **Gerar resposta com IA** quando quiser uma síntese. Abra uma fonte para conferir o texto. Na lista de acervos, use a remoção para desvincular um ZIM do catálogo. Para incluir um acervo, use o seletor de arquivos no Android.
+5. Mantenha o WikiAI Offline visível no Android. **Sair** encerra a sessão no navegador. No Android, **Encerrar acesso local** fecha o painel para todos os navegadores e **Gerar código e desconectar navegadores** revoga as sessões para permitir um novo pareamento.
+
+> O painel usa HTTP na rede local. Ative apenas em uma rede privada de confiança. Se a página não abrir, confira o endereço completo e se a rede permite comunicação entre os dispositivos.
+
+### 5. Gerencie o modelo
 
 Em **Acervo offline → Opções avançadas**, é possível trocar ou remover um modelo personalizado que já tenha sido instalado no dispositivo.
+
+---
+
+## 📸 Galeria
+
+Capturas do APK 0.7.0 em execução no Android e do painel conectado pelo navegador. O acervo de teste contém material sobre fotossíntese.
+
+### Web
+
+<p align="center">
+  <img width="100%" src="docs/screenshots/lan-desktop.webp" alt="Biblioteca offline com acervos ZIM no painel web" />
+  <br /><sub>Biblioteca offline e gerenciamento do catálogo</sub>
+</p>
+
+<p align="center">
+  <img width="100%" src="docs/screenshots/lan-source.webp" alt="Texto original da fonte consultada pelo painel web" />
+  <br /><sub>Leitura da fonte original no navegador</sub>
+</p>
+
+### Mobile
+
+<table>
+  <tr>
+    <td align="center" width="50%"><strong>Painel no navegador</strong></td>
+    <td align="center" width="50%"><strong>Acesso pela rede no Android</strong></td>
+  </tr>
+  <tr>
+    <td align="center"><img width="330" src="docs/screenshots/lan-mobile.webp" alt="Pesquisa e resposta com IA local em um navegador móvel" /></td>
+    <td align="center"><img width="330" src="docs/screenshots/lan-android.webp" alt="Janela do Android para ativar o acesso pela rede" /></td>
+  </tr>
+</table>
 
 ---
 
@@ -101,6 +146,8 @@ Em **Acervo offline → Opções avançadas**, é possível trocar ou remover um
 ```text
 WikiAIOffline/
 ├── app/src/main/                  App Android, interface e integração local
+│   └── assets/lan/                Painel web incorporado ao APK
+├── docs/                          Pesquisa, validação e capturas
 ├── gradle/                        Configuração do Gradle e revisão do modelo
 ├── patches/                       Ajustes do llama.cpp para Android
 ├── tests/                         Testes Kotlin de busca e resposta
@@ -146,7 +193,7 @@ bash gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleOfflineDebug
 O resultado ARM64 da compilação de depuração é salvo em:
 
 ```text
-app/build/outputs/apk/offline/WikiAI-Offline-v0.6.0-arm64-v8a-debug.apk
+app/build/outputs/apk/offline/WikiAI-Offline-v0.7.0-arm64-v8a-debug.apk
 ```
 
 Para compilar para um emulador **x86_64**, acrescente o parâmetro `-PwikiAbis=x86_64` ao comando Gradle.
@@ -167,9 +214,7 @@ O processo de build verifica o **tamanho** e o **SHA-256** do modelo informado. 
 
 ## 🧪 Testes e qualidade
 
-Na verificação local da versão 0.6.0, os **dois testes JUnit** passaram e o Android Lint registrou **zero erros e 35 avisos**. Em modo avião, a consulta a um ZIM em inglês gerou uma resposta em português com referência no emulador x86_64 e no teste do APK ARM64 por tradução de ABI.
-
-Falta medir o desempenho em aparelho ARM64 físico e com acervos de vários gigabytes. [Relatório de verificação](TEST_REPORT.txt)
+Os resultados do APK 0.7.0 e os cenários exercitados no navegador estão no relatório de acesso local. A versão anterior mantém seu registro de verificação. [Validação da versão 0.7.0](docs/ACESSO_LOCAL.md#validação) · [Validação da versão 0.6.0](TEST_REPORT.txt)
 
 O projeto disponibiliza testes Kotlin e tarefas de verificação pelo Gradle:
 
@@ -201,7 +246,8 @@ O workflow prepara o ambiente Android, executa os testes e o Lint e disponibiliz
 
 ## 🔐 Privacidade e limitações
 
-- **Execução local** com pesquisa e inferência no dispositivo. O APK verificado opera sem a permissão `INTERNET`.
+- **Execução local.** A pesquisa e a inferência são feitas no Android, inclusive em modo avião com o painel desativado. As permissões de rede viabilizam o compartilhamento opcional na LAN.
+- **Compartilhamento temporário.** O código para conectar um navegador vence em cinco minutos. As sessões existentes podem ser revogadas no Android. Como o painel usa HTTP, o tráfego pode ser lido na rede.
 - **Acervo separado** do APK. Cada biblioteca ZIM é obtida e adicionada pelo usuário.
 - **Respostas geradas** podem omitir informações ou acrescentar detalhes ausentes do trecho. A referência indica o contexto usado pela IA e abre a fonte para conferência.
 
@@ -211,6 +257,7 @@ O workflow prepara o ambiente Android, executa os testes e o Lint e disponibiliz
 
 - [Biblioteca do Kiwix — acervos ZIM](https://library.kiwix.org/)
 - [LFM2.5 350M GGUF — cartão do modelo](https://huggingface.co/LiquidAI/LFM2.5-350M-GGUF)
+- [Acesso à rede local no Android](https://developer.android.com/privacy-and-security/local-network-permission)
 - [Licenças e fontes incluídas no projeto](LICENCAS_E_FONTE.txt)
 
 ---

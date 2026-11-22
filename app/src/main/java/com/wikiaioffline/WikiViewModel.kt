@@ -13,11 +13,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.takeWhile
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 
 internal data class WikiOperation(
     val label: String,
@@ -35,11 +33,29 @@ internal data class ArticlePreview(
 class WikiViewModel(application: Application) : AndroidViewModel(application) {
     private val zim = MultiLibraryRepository(application)
     private val model = ModelRepository(application)
+    private val queryEngine = WikiQueryEngine(zim, model)
     private val history = ChatHistory(application)
     private val prefs = application.getSharedPreferences("wiki_preferences", 0)
     private var currentJob: Job? = null
     private var previewJob: Job? = null
     private var progressKey: Any? = null
+    private var lanServer: LanHttpServer? = null
+    private var lanStartJob: Job? = null
+    private var lanStopJob: Job? = null
+    private var lanWatchJob: Job? = null
+    private var lanRevision = 0L
+    private val lanBackend = LanCatalogBackend(zim, queryEngine) {
+        viewModelScope.launch {
+            libraries = zim.libraries()
+        }
+    }
+
+    internal var lanEndpoint by mutableStateOf<LanEndpoint?>(null)
+        private set
+    internal var lanStarting by mutableStateOf(false)
+        private set
+    internal var lanNotice by mutableStateOf<String?>(null)
+        private set
 
     internal var historyUnreadable by mutableStateOf(false)
         private set
@@ -100,6 +116,82 @@ class WikiViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     internal fun dismissNotice() { notice = null }
+
+    internal fun startLan() {
+        if (lanEndpoint != null || lanStarting) return
+        lanStarting = true
+        lanNotice = null
+        val revision = ++lanRevision
+        val closing = lanStopJob
+        lanStartJob = viewModelScope.launch {
+            var candidate: LanHttpServer? = null
+            try {
+                closing?.join()
+                val (target, endpoint) = withContext(Dispatchers.IO + NonCancellable) {
+                    val context = getApplication<Application>()
+                    val target = LanNetwork.targets(context).firstOrNull()
+                        ?: error("Conecte o Android a uma rede Wi-Fi ou Ethernet privada com endereço IPv4.")
+                    val server = LanHttpServer(target.address, lanBackend) { name -> context.assets.open(name) }
+                    candidate = server
+                    target to server.start()
+                }
+                if (revision != lanRevision) return@launch
+                lanServer = candidate
+                candidate = null
+                lanEndpoint = endpoint
+                lanWatchJob = viewModelScope.launch {
+                    while (true) {
+                        delay(2_000L)
+                        if (target !in LanNetwork.targets(getApplication<Application>())) {
+                            stopLan()
+                            lanNotice = "A rede local mudou. Ative o acesso novamente quando estiver conectado."
+                            break
+                        }
+                    }
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                if (revision == lanRevision) lanNotice = error.details()
+            } finally {
+                withContext(Dispatchers.IO + NonCancellable) {
+                    candidate?.stop()
+                }
+                if (revision == lanRevision) lanStarting = false
+            }
+        }
+    }
+
+    internal fun renewLanCode() {
+        val server = lanServer ?: return
+        runCatching { server.refreshCode() }.onSuccess {
+            lanEndpoint = it
+            lanNotice = null
+        }.onFailure {
+            lanNotice = "Não foi possível gerar um novo código."
+        }
+    }
+
+    internal fun stopLan() {
+        lanRevision++
+        lanWatchJob?.cancel()
+        val opening = lanStartJob
+        opening?.cancel()
+        lanStartJob = null
+        val server = lanServer
+        server?.revoke()
+        lanServer = null
+        lanEndpoint = null
+        lanStarting = false
+        if (server != null || opening?.isCompleted == false) {
+            val closing = lanStopJob
+            lanStopJob = CoroutineScope(Dispatchers.IO).launch {
+                closing?.join()
+                opening?.join()
+                server?.stop()
+            }
+        }
+    }
 
     internal fun addLibraries(uris: List<Uri>) {
         if (uris.isEmpty()) return
@@ -167,34 +259,24 @@ class WikiViewModel(application: Application) : AndroidViewModel(application) {
             var sources = emptyList<ArticleEvidence>()
             messages = messages.takeLast(98) + user
             try {
-                var plan = OfflineBilingualSearch.plan(asked)
-                var found = zim.search(plan, limit, english)
-                if (found.articles.isEmpty() && english && zim.hasEnglishSource()) {
-                    val translated = if (prepareModel()) translateQuery(asked) else null
-                    if (translated != null) {
-                        val retryPlan = OfflineBilingualSearch.plan(asked, translated)
-                        if (retryPlan.englishQueries != plan.englishQueries) {
-                            operation = WikiOperation("Pesquisando com termos em inglês", answer = true)
-                            val retry = zim.search(retryPlan, limit, english)
-                            if (retry.articles.isNotEmpty()) {
-                                plan = retryPlan
-                                found = retry
-                            }
-                        }
-                    }
+                val key = Any().also { progressKey = it }
+                val status: (String, Int?) -> Unit = { label, progress ->
+                    reportProgress(key, label, progress, answer = true)
                 }
-                val primary = found.articles.maxByOrNull(plan::relevanceScore)
+                val found = queryEngine.search(asked, limit, english, expandQuery = true, status = status)
+                sources = found.articles
+                val primary = sources.firstOrNull()
                 if (primary != null) {
-                    sources = listOf(primary) + found.articles.filterNot { it === primary }
                     previewReply = reply.copy(
                         content = WikiRag.extractive(sources, excerptLimit = 190),
                         sources = sources
                     )
                 }
-                val content = when {
-                    primary == null -> "Nenhum trecho relevante foi encontrado. Tente o título do artigo ou palavras-chave mais específicas."
-                    prepareModel() -> generateAnswer(asked, primary, sources)
-                    else -> "A IA local não pôde iniciar.\n\n${WikiRag.extractive(sources)}"
+                val content = if (primary == null) {
+                    "Nenhum trecho relevante foi encontrado. Tente o título do artigo ou palavras-chave mais específicas."
+                } else {
+                    val synthesis = queryEngine.synthesize(asked, primary, status)
+                    synthesis.answer ?: listOfNotNull(synthesis.notice, WikiRag.extractive(sources)).joinToString("\n\n")
                 }
                 previewReply = null
                 messages = messages + reply.copy(content = addSearchNotices(content, found.notices), sources = sources)
@@ -232,68 +314,6 @@ class WikiViewModel(application: Application) : AndroidViewModel(application) {
     internal fun closeArticle() {
         previewJob?.cancel()
         article = null
-    }
-
-    private suspend fun prepareModel(): Boolean {
-        if (model.isReady) return true
-        val label = "Preparando a IA integrada"
-        operation = WikiOperation(label, answer = true)
-        val key = Any().also { progressKey = it }
-        return try {
-            model.ensureReady { percent ->
-                reportProgress(key, label, percent?.takeUnless { it == 100 }, answer = true)
-            }
-            model.isReady
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            false
-        } finally {
-            progressKey = null
-        }
-    }
-
-    private suspend fun translateQuery(question: String): String? = try {
-        operation = WikiOperation("Buscando o assunto em inglês", answer = true)
-        withTimeoutOrNull(25_000L) {
-            val buffer = StringBuilder()
-            model.answerStream(OfflineBilingualSearch.modelQueryPrompt(question), maxTokens = 28)
-                .takeWhile { token ->
-                    buffer.append(token.take(240 - buffer.length))
-                    buffer.length < 240 && buffer.trimStart().indexOf('\n') < 0
-                }
-                .collect()
-            buffer.toString()
-        }
-    } catch (e: CancellationException) {
-        throw e
-    } catch (_: Exception) {
-        null
-    }
-
-    private suspend fun generateAnswer(
-        question: String,
-        primary: ArticleEvidence,
-        sources: List<ArticleEvidence>
-    ): String {
-        operation = WikiOperation("Preparando a resposta em português", answer = true)
-        val fallback = WikiRag.extractive(sources)
-        return try {
-            val generated = withTimeoutOrNull(90_000L) {
-                val buffer = StringBuilder()
-                model.answerStream(WikiRag.makeBriefPrompt(question, primary), maxTokens = 140)
-                    .collect { buffer.append(it) }
-                buffer.toString()
-            }
-            val validated = generated?.let { WikiRag.answerForSingleSource(it, question) }
-            when {
-                validated != null -> validated
-                generated == null -> "A IA excedeu o tempo de resposta.\n\n$fallback"
-                else -> fallback
-            }
-        } catch (e: Exception) {
-            "A IA falhou durante a geração. ${e.details()}\n\n$fallback"
-        }
     }
 
     private suspend fun saveHistory() {
@@ -335,9 +355,12 @@ class WikiViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     override fun onCleared() {
+        stopLan()
         val active = currentJob
         val preview = previewJob
+        val closing = lanStopJob
         CoroutineScope(Dispatchers.IO).launch {
+            closing?.join()
             active?.join()
             preview?.join()
             runCatching { zim.close() }

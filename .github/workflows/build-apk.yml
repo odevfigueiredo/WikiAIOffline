@@ -61,7 +61,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          apk='app/build/outputs/apk/offline/WikiAI-Offline-v0.6.0-arm64-v8a-debug.apk'
+          apk='app/build/outputs/apk/offline/WikiAI-Offline-v0.7.0-arm64-v8a-debug.apk'
           sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
           if [[ -z "$sdk" ]]; then
             echo 'Android SDK não encontrado: ANDROID_HOME/ANDROID_SDK_ROOT ausentes.' >&2
@@ -77,8 +77,8 @@ jobs:
       - name: Publicar APK de testes
         uses: actions/upload-artifact@v4
         with:
-          name: wikiai-offline-v0.6.0-arm64-debug-apk
-          path: app/build/outputs/apk/offline/WikiAI-Offline-v0.6.0-arm64-v8a-debug.apk
+          name: wikiai-offline-v0.7.0-arm64-debug-apk
+          path: app/build/outputs/apk/offline/WikiAI-Offline-v0.7.0-arm64-v8a-debug.apk
           if-no-files-found: error
           compression-level: 0
           retention-days: 14

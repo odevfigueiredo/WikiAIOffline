@@ -155,13 +155,13 @@ internal class ZimRepository private constructor(
         return RetrievalResult(ranked, ranked.any { it.path in indexedPaths }, notices)
     }
 
-    fun readArticle(path: String): String {
+    fun readArticle(path: String): ArticleText {
         val entry = try {
             archive.getEntryByPath(path)
         } catch (error: EntryNotFoundException) {
             throw IOException("O artigo não foi encontrado neste acervo.", error)
         }
-        return read(entry)?.text ?: throw IOException("O artigo não contém texto legível ou é grande demais.")
+        return read(entry) ?: throw IOException("O artigo não contém texto legível ou é grande demais.")
     }
 
     fun close() {
@@ -245,7 +245,7 @@ internal class ZimRepository private constructor(
         }
     }
 
-    private data class ArticleText(val title: String, val path: String, val text: String)
+    data class ArticleText(val title: String, val path: String, val text: String)
 
     private fun read(entry: Entry): ArticleText? {
         val item = entry.getItem(true)

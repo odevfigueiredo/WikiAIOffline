@@ -35,6 +35,9 @@ data class ZimLibraryInfo(
     val date: String? = null
 )
 
+internal class PendingLibraryCopyDeletionException :
+    IOException("O acervo saiu do catálogo. O app vai tentar apagar a cópia pendente na próxima abertura.")
+
 /** Gerencia arquivos e permissões locais, serializando acesso aos identificadores nativos. */
 class MultiLibraryRepository(context: Context) {
     private data class SavedBook(
@@ -211,17 +214,19 @@ class MultiLibraryRepository(context: Context) {
         }
     }
 
-    suspend fun remove(libraryId: String): Unit = operate {
+    suspend fun remove(libraryId: String): Boolean = operate {
         val saved = savedBooks()
         val previous = saved.firstOrNull { it.id == libraryId }
+        if (previous == null && libraryId !in open) return@operate false
         if (previous != null) saveBooks(saved.filterNot { it.id == libraryId })
         val active = open.remove(libraryId)
         publish()
         active?.let { runCatching { it.repo.close() } }
         previous?.copyName?.let { copy ->
-            if (!deleteCopy(copy)) throw IOException("A biblioteca saiu do catálogo. A cópia pendente será apagada na próxima abertura.")
+            if (!deleteCopy(copy)) throw PendingLibraryCopyDeletionException()
         }
         previous?.takeIf { it.copyName == null }?.let { releaseAccessIfUnused(it.uri) }
+        true
     }
 
     suspend fun search(
@@ -256,7 +261,9 @@ class MultiLibraryRepository(context: Context) {
         RetrievalResult(BilingualRanking.select(found, plan, limit, includeEnglish), usedFullText, notices.distinct())
     }
 
-    suspend fun readArticle(source: ArticleEvidence): String = operate {
+    suspend fun readArticle(source: ArticleEvidence): String = readArticleDetails(source).text
+
+    internal suspend fun readArticleDetails(source: ArticleEvidence): ZimRepository.ArticleText = operate {
         val book = if (source.libraryId.isNotBlank()) {
             open[source.libraryId]
         } else {

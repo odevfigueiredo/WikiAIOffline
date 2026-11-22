@@ -30,7 +30,7 @@ object WikiRag {
         val prose = citation.replace(text, "")
         if (text.lineSequence().count(String::isNotBlank) != 1 ||
             reasoningTag.containsMatchIn(text) || danglingReference.containsMatchIn(prose) ||
-            prose.none(Char::isLetter)) return null
+            prose.none(Char::isLetterOrDigit)) return null
         val answerTerms = SearchTerms.terms(prose)
         val questionTerms = SearchTerms.terms(question)
         if (answerTerms.isNotEmpty() && answerTerms.all { it in questionTerms }) return null

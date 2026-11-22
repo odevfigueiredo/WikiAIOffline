@@ -10,6 +10,10 @@ WIKIAI OFFLINE | COMPONENTES DE TERCEIROS
 - java-libkiwix, sob GPLv3 ou superior. Ao distribuir o APK que inclui
   a biblioteca, observe as obrigações relativas ao código-fonte
   correspondente. https://github.com/kiwix/java-libkiwix
+- NanoHTTPD 2.3.1, sob licença BSD de três cláusulas.
+  https://github.com/NanoHttpd/nanohttpd/blob/nanohttpd-project-2.3.1/LICENSE.md
+- ZXing Core 3.5.3, sob licença Apache 2.0.
+  https://github.com/zxing/zxing/blob/zxing-3.5.3/LICENSE
 - Kotlin, Compose, AndroidX e as demais dependências permanecem sob
   suas licenças próprias.
 - Os acervos ZIM são fornecidos pelo usuário. Os textos e imagens

@@ -1,4 +1,4 @@
-WIKIAI OFFLINE 0.6.0 | INSTRUÇÕES
+WIKIAI OFFLINE 0.7.0 | INSTRUÇÕES
 
 1. Instale o APK ARM64 em um aparelho com Android 13 ou superior.
 2. Toque em Abrir arquivo ZIM. Selecione um ZIM da Wikipédia ou de outro
@@ -7,9 +7,21 @@ WIKIAI OFFLINE 0.6.0 | INSTRUÇÕES
 3. Confira o título e a descrição do acervo. Se esses dados não estiverem
    no ZIM, o app usa o nome do arquivo para identificar o acervo.
 4. Faça uma pergunta em português. A busca mostra os trechos e a IA que
-   vem incluída no APK prepara uma resposta curta.
+   vem incluída no APK prepara uma resposta curta. Nenhuma configuração
+   de modelo é necessária para começar.
 5. Toque numa referência para ler o conteúdo original. Os trechos
    continuam disponíveis quando a síntese não está disponível.
 
-Use o README.md para compilar o projeto e TEST_REPORT.txt para consultar
-os resultados de verificação desta versão.
+PAINEL EM OUTRO DISPOSITIVO
+
+1. Conecte os dispositivos à mesma rede privada. No Android, toque em
+   Acesso pela rede e depois em Ativar acesso local.
+2. Leia o QR ou digite o endereço no navegador. Informe o código de oito
+   dígitos antes de ele expirar. Mantenha o WikiAI visível no Android.
+3. Pesquise, abra as fontes e gerencie o catálogo no navegador. Para
+   adicionar um ZIM, use o seletor de arquivos no Android.
+4. Encerre o acesso local ao terminar. Como o painel usa HTTP, use-o em
+   uma rede privada de confiança.
+
+Use o README.md para compilar o projeto e docs/ACESSO_LOCAL.md para
+consultar a validação desta versão.

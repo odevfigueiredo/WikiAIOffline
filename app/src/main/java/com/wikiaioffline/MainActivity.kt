@@ -3,6 +3,7 @@ package com.wikiaioffline
 import android.os.Bundle
 import android.content.Context
 import android.content.Intent
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -38,6 +39,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -91,11 +93,18 @@ private class OpenLocalDocuments : ActivityResultContracts.OpenMultipleDocuments
 }
 
 class MainActivity : ComponentActivity() {
+    private lateinit var wiki: WikiViewModel
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
-        val wiki = ViewModelProvider(this)[WikiViewModel::class.java]
+        wiki = ViewModelProvider(this)[WikiViewModel::class.java]
         setContent {
+            val sharing = wiki.lanEndpoint != null
+            LaunchedEffect(sharing) {
+                val screenFlag = WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+                if (sharing) window.addFlags(screenFlag) else window.clearFlags(screenFlag)
+            }
             MaterialTheme(
                 colorScheme = darkColorScheme(
                     primary = Accent, onPrimary = Color(0xFF25070E), background = Ink,
@@ -106,12 +115,18 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onStop() {
+        if (!isChangingConfigurations) wiki.stopLan()
+        super.onStop()
+    }
 }
 
 @Composable
 private fun WikiApp(wiki: WikiViewModel) {
     var question by rememberSaveable { mutableStateOf("") }
     var showLibrary by rememberSaveable { mutableStateOf(false) }
+    var showLan by rememberSaveable { mutableStateOf(false) }
     var confirm by remember { mutableStateOf<Confirmation?>(null) }
     val openZims = rememberLauncherForActivityResult(remember { OpenLocalDocuments() }) {
         wiki.addLibraries(it)
@@ -143,6 +158,9 @@ private fun WikiApp(wiki: WikiViewModel) {
                 }
                 IconButton(onClick = { showLibrary = true }) {
                     Icon(Icons.Filled.FolderOpen, "Gerenciar acervo", tint = Accent)
+                }
+                IconButton(onClick = { showLan = true }) {
+                    Icon(Icons.Filled.Wifi, "Acesso pela rede", tint = if (wiki.lanEndpoint != null) Good else Muted)
                 }
                 IconButton(
                     enabled = (wiki.messages.isNotEmpty() || wiki.historyUnreadable) && work == null,
@@ -297,6 +315,7 @@ private fun WikiApp(wiki: WikiViewModel) {
             confirm = { confirm = it }
         )
     }
+    if (showLan) LanAccessDialog(wiki, onClose = { showLan = false })
     wiki.article?.let { preview -> ArticleDialog(preview, wiki::closeArticle) }
     confirm?.let { item ->
         AlertDialog(
