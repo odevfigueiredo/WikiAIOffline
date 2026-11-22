@@ -177,8 +177,8 @@ android {
         applicationId = "com.wikiaioffline"
         minSdk = 33 // O módulo Android atual do llama.cpp exige Android 13+.
         targetSdk = 35
-        versionCode = 7
-        versionName = "0.7.0"
+        versionCode = 8
+        versionName = "0.8.0"
         ndk { abiFilters += wikiAbis }
     }
 
@@ -219,7 +219,7 @@ tasks.register<AlignOfflineApk>("assembleOfflineDebug") {
     zipalign.set(tools.map { it.file(if (windows) "zipalign.exe" else "zipalign") })
     apksigner.set(tools.map { it.file("lib/apksigner.jar") })
     debugKeystore.fileValue(checkNotNull(android.signingConfigs.getByName("debug").storeFile))
-    output.set(layout.buildDirectory.file("outputs/apk/offline/WikiAI-Offline-v0.7.0-${wikiAbis.joinToString("-")}-debug.apk"))
+    output.set(layout.buildDirectory.file("outputs/apk/offline/WikiAI-Offline-v0.8.0-${wikiAbis.joinToString("-")}-debug.apk"))
 }
 
 kotlin { jvmToolchain(17) }
@@ -238,6 +238,8 @@ dependencies {
     implementation("org.nanohttpd:nanohttpd:2.3.1")
     implementation("org.kiwix:libkiwix:2.6.0")
     implementation("com.google.zxing:core:3.5.3")
+    implementation("org.jsoup:jsoup:1.21.2")
+    implementation("com.caverock:androidsvg-aar:1.4")
     implementation(project(":lib")) // binding JNI de inferência local oficial do llama.cpp
     testImplementation(libs.junit)
     testImplementation("org.json:json:20250107")

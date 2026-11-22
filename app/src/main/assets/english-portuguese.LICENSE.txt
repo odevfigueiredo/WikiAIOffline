@@ -1,0 +1,17 @@
+WikDict, por Karl Bartel. Dados do Wikcionário extraídos via DBnary.
+https://www.wikdict.com/page/about
+https://www.wiktionary.org/
+https://kaiko.getalp.org/about-dbnary/
+
+Licença dos dados e deste TSV: Creative Commons Atribuição-CompartilhaIgual 4.0 Internacional.
+https://creativecommons.org/licenses/by-sa/4.0/
+
+Arquivo fonte: https://download.wikdict.com/dictionaries/sqlite/2/en-pt.sqlite3
+Snapshot do catálogo: 23 de junho de 2026.
+SHA-256 do arquivo fonte: C37ED57201284CF187E17516FE9C6B4B6C1B9C166909A76E9C81CBDC19B961FD
+
+Alterações: extração da tabela de traduções simples, sem definições. Chaves em minúsculas
+com normalização Unicode e de espaços. Entradas sem texto e chaves de mais de seis palavras
+foram descartadas. Cada linha guarda até três equivalentes em português, na ordem do
+dicionário por prioridade. A variante polônio foi movida para o início para o português brasileiro.
+O TSV é UTF-8, sem cabeçalho.

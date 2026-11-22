@@ -31,7 +31,9 @@ import org.json.JSONObject
 internal interface LanBackend {
     suspend fun catalog(): JSONObject
     suspend fun search(query: String, includeEnglish: Boolean, withAnswer: Boolean): JSONObject
+    suspend fun searchImages(query: String, includeEnglish: Boolean): JSONObject
     suspend fun article(libraryId: String, path: String): JSONObject
+    suspend fun image(libraryId: String, path: String): ZimImageContent
     suspend fun remove(id: String): JSONObject
 }
 
@@ -177,11 +179,8 @@ private class LanListener(
         response.addHeader("X-Frame-Options", "DENY")
         response.addHeader("Cross-Origin-Resource-Policy", "same-origin")
         response.addHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-        response.addHeader(
-            "Content-Security-Policy",
-            "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; " +
-                "connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
-        )
+        val policy = if (request.uri == "/api/image") IMAGE_POLICY else PANEL_POLICY
+        response.addHeader("Content-Security-Policy", policy)
         return response
     }
 
@@ -214,15 +213,19 @@ private class LanListener(
                 if (!paired) return needPairing()
                 success(call(10_000) { backend.catalog() })
             }
-            "/api/search", "/api/answer" -> request.only(Method.POST) {
+            "/api/search", "/api/answer", "/api/images/search" -> request.only(Method.POST) {
                 if (!paired) return needPairing()
-                search(request, withAnswer = request.uri == "/api/answer")
+                search(request)
             }
-            "/api/article" -> request.only(Method.GET) {
+            "/api/article", "/api/image" -> request.only(Method.GET) {
                 if (!paired) return needPairing()
                 val id = checkField(request.parameters["libraryId"]?.singleOrNull(), 128)
                 val path = checkField(request.parameters["path"]?.singleOrNull(), 2_048, trim = false)
-                success(call(25_000) { backend.article(id, path) })
+                if (request.uri == "/api/image") {
+                    imageResponse(call(25_000) { backend.image(id, path) })
+                } else {
+                    success(call(25_000) { backend.article(id, path) })
+                }
             }
             "/api/libraries/remove" -> request.only(Method.POST) {
                 if (!paired) return needPairing()
@@ -247,13 +250,26 @@ private class LanListener(
         }
     }
 
-    private fun search(request: IHTTPSession, withAnswer: Boolean): Response {
+    private fun search(request: IHTTPSession): Response {
         val body = request.jsonBody()
         val query = checkField(body.opt("query"), 600)
         val includeEnglish = body.opt("includeEnglish") as? Boolean
             ?: throw LanApiException(400, "Informe se deseja consultar também o acervo em inglês.")
-        val timeout = if (withAnswer) 145_000L else 35_000L
-        return success(call(timeout) { backend.search(query, includeEnglish, withAnswer) })
+        val result = when (request.uri) {
+            "/api/images/search" -> call(35_000) { backend.searchImages(query, includeEnglish) }
+            "/api/answer" -> call(145_000) { backend.search(query, includeEnglish, withAnswer = true) }
+            else -> call(35_000) { backend.search(query, includeEnglish, withAnswer = false) }
+        }
+        return success(result)
+    }
+
+    private fun imageResponse(image: ZimImageContent): Response {
+        val mime = zimImageMimeType(image.mimeType)
+        val limit = zimImageByteLimits[mime]
+            ?: return failure(Status.UNSUPPORTED_MEDIA_TYPE, "Formato de imagem indisponível.")
+        if (image.bytes.isEmpty()) return failure(Status.NOT_FOUND, "A imagem não está disponível neste acervo.")
+        if (image.bytes.size > limit) return failure(Status.PAYLOAD_TOO_LARGE, "A imagem é grande demais.")
+        return newFixedLengthResponse(Status.OK, mime, image.bytes.inputStream(), image.bytes.size.toLong())
     }
 
     private fun IHTTPSession.jsonBody(): JSONObject {
@@ -305,6 +321,11 @@ private class LanListener(
 
     private companion object {
         const val COOKIE_NAME = "wikiai_lan_session"
+        const val PANEL_POLICY = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; " +
+            "connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+        // Direct navigation can render an SVG as a document. Keep it isolated from the panel origin.
+        const val IMAGE_POLICY = "sandbox; default-src 'none'; " +
+            "base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
         val codePattern = Regex("[0-9]{8}")
         val tokenPattern = Regex("[A-Za-z0-9_-]{43}")
         val assets = mapOf(

@@ -248,8 +248,7 @@ class MultiLibraryRepository(context: Context) {
         for ((_, repo) in books) {
             currentCoroutineContext().ensureActive()
             try {
-                val queries = if (includeEnglish) plan.queriesFor(repo.language) else listOf(plan.originalQuestion)
-                val result = repo.findEvidenceSet(queries, limit * 2)
+                val result = repo.findEvidenceSet(plan.queriesFor(repo.language), limit * 2)
                 found.addAll(result.articles)
                 notices.addAll(result.notices.map { repo.name + ": " + it })
                 usedFullText = usedFullText || result.usedFullText
@@ -259,6 +258,31 @@ class MultiLibraryRepository(context: Context) {
             }
         }
         RetrievalResult(BilingualRanking.select(found, plan, limit, includeEnglish), usedFullText, notices.distinct())
+    }
+
+    suspend fun searchImages(
+        plan: BilingualPlan,
+        limit: Int = 12,
+        includeEnglish: Boolean = true
+    ): List<ZimImage> = operate {
+        if (limit <= 0) return@operate emptyList()
+        val maximum = limit.coerceAtMost(24)
+        val found = mutableListOf<RankedZimImage>()
+        for ((_, repo) in open.values) {
+            currentCoroutineContext().ensureActive()
+            if (!includeEnglish && repo.language == SourceLanguage.ENGLISH) continue
+            try {
+                found.addAll(repo.findImages(plan.queriesFor(repo.language), maximum))
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+            }
+        }
+        found.sortedByDescending { it.score }.take(maximum).map { it.image }
+    }
+
+    suspend fun readImage(libraryId: String, path: String): ZimImageContent = operate {
+        val book = open[libraryId] ?: throw IOException("O acervo desta imagem não está aberto.")
+        book.repo.readImage(path)
     }
 
     suspend fun readArticle(source: ArticleEvidence): String = readArticleDetails(source).text

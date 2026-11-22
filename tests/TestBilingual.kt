@@ -27,6 +27,21 @@ fun checkBilingual() {
     check(OfflineBilingualSearch.hints("Quais dois materiais são usados na fotossíntese segundo o trecho?") == listOf("photosynthesis"))
     check("photosynthesis" in OfflineBilingualSearch.hints("Compare energia e fotossíntese"))
     check(OfflineBilingualSearch.plan("Newton").queriesFor(SourceLanguage.ENGLISH) == listOf("Newton"))
+    val quadratic = OfflineBilingualSearch.plan("Show me the quadratic formula")
+    check(quadratic.queriesFor(SourceLanguage.PORTUGUESE).first() == "fórmula de Bhaskara")
+    check("equação do segundo grau" in quadratic.queriesFor(SourceLanguage.PORTUGUESE))
+    check(quadratic.originalQuestion in quadratic.queriesFor(SourceLanguage.PORTUGUESE))
+    check(OfflineBilingualSearch.plan("fórmula de Bhaskara").englishQueries.first() == "quadratic formula")
+    check(OfflineBilingualSearch.looksEnglish("Who discovered polonium?"))
+    check(!OfflineBilingualSearch.looksEnglish("Quem descobriu o polônio?"))
+    val polonium = OfflineBilingualSearch.plan("Who discovered polonium?")
+    val translatedPolonium = OfflineBilingualSearch.withPortugueseModel(polonium, "Portuguese title: Polônio")
+    check(translatedPolonium.queriesFor(SourceLanguage.PORTUGUESE).first() == "Polônio")
+    check(OfflineBilingualSearch.withPortugueseModel(polonium, "Who discovered polonium?") == polonium)
+    val singlePortugueseSource = ArticleEvidence(
+        "Equação do segundo grau", "quadratica", "Usamos a fórmula de Bhaskara.", language = "pt"
+    )
+    check(quadratic.relevanceScore(singlePortugueseSource) > 0)
 
     val evidence = listOf(
         ArticleEvidence("Queda do Império Romano", "A/queda", "A crise acelerou a queda do império romano.", "wikipedia_pt_all.zim", "pt"),

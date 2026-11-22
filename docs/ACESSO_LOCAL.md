@@ -48,3 +48,14 @@ SHA-256 do APK ARM64 desta compilação local: `56961D759CA47E67AE80398FB35028F3
 ## Arte do painel
 
 O painel carrega a [ilustração WebP](../app/src/main/assets/lan/library-art.webp) incluída no APK. A galeria do README mostra capturas da interface em execução.
+
+## Busca de imagens na versão 0.8.0
+
+- Um ZIM de teste em português com SVG da fórmula de Bhaskara e PNG do discriminante foi aberto no Android. A pesquisa por `quadratic formula` encontrou as duas imagens com os acervos em inglês desativados.
+- O Android em modo avião exibiu as miniaturas e abriu a fórmula inteira. Também abriu um PNG local pelo seletor. No Edge, o painel em 1440 × 980 e 390 × 844 abriu a imagem ampliada e o artigo com suas imagens. O Wi-Fi de teste estava sem acesso à internet.
+- A busca inclui um dicionário inglês–português com 66.739 termos. O arquivo está no APK e é lido sob demanda. [Origem e licença do dicionário](../app/src/main/assets/english-portuguese.LICENSE.txt)
+- No Edge e no Android em modo avião, `Who discovered polonium?` encontrou o artigo **Polônio** com os acervos em inglês desativados. A interface exibiu `polônio` como termo traduzido. A fonte cita Marie e Pierre Curie em 1898. Nessas execuções, a síntese citou apenas Marie Curie.
+- As compilações x86_64 e ARM64 passaram nos 10 testes JUnit. O Android Lint registrou zero erros e 31 avisos. A assinatura, o alinhamento e os hashes do dicionário e do modelo foram conferidos no APK ARM64.
+- O APK ARM64 também executou por tradução de ABI no Android 16 em modo avião. Nesse teste, encontrou **Polônio** a partir da pergunta em inglês e voltou a localizar a fórmula de Bhaskara na busca de imagens.
+
+SHA-256 do APK ARM64 0.8.0: `2E9FA074F895A562BED46FB86B10CD27EC4718C1B453E84341621F6E3F3B8917`.

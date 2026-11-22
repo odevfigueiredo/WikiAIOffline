@@ -32,7 +32,8 @@ internal class LanCatalogBackend(
         val busy = withAnswer && !generation.tryLock()
         return try {
             val found = queryEngine.search(
-                query, limit = 5, includeEnglish = includeEnglish, expandQuery = withAnswer && !busy
+                query, limit = 5, includeEnglish = includeEnglish, expandQuery = withAnswer && !busy,
+                translatePortuguese = !busy
             )
             val notices = found.notices.toMutableList()
             val first = found.articles.firstOrNull()
@@ -70,6 +71,19 @@ internal class LanCatalogBackend(
         }
     }
 
+    override suspend fun searchImages(query: String, includeEnglish: Boolean): JSONObject {
+        val result = queryEngine.searchImages(query, includeEnglish)
+        return JSONObject()
+            .put("images", JSONArray(result.images.map(ZimImage::panelFields)))
+            .put("notices", JSONArray(result.notices))
+    }
+
+    override suspend fun image(libraryId: String, path: String): ZimImageContent = try {
+        library.readImage(libraryId, path)
+    } catch (_: IOException) {
+        throw LanApiException(404, "A imagem não está disponível neste acervo.")
+    }
+
     override suspend fun article(libraryId: String, path: String): JSONObject {
         val source = ArticleEvidence(title = "", path = path, excerpt = "", libraryId = libraryId)
         val article = try {
@@ -81,6 +95,7 @@ internal class LanCatalogBackend(
             .put("title", article.title)
             .put("text", article.text.take(48_000))
             .put("shortened", article.text.length > 48_000)
+            .put("images", JSONArray(article.images.map(ZimImage::panelFields)))
     }
 
     override suspend fun remove(id: String): JSONObject {
@@ -94,3 +109,11 @@ internal class LanCatalogBackend(
         }
     }
 }
+
+private fun ZimImage.panelFields() = JSONObject()
+    .put("libraryId", libraryId)
+    .put("path", path)
+    .put("title", title)
+    .put("articleTitle", articleTitle ?: JSONObject.NULL)
+    .put("articlePath", articlePath ?: JSONObject.NULL)
+    .put("book", book)

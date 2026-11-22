@@ -35,12 +35,13 @@ enum class SourceLanguage(val tag: String) {
 data class BilingualPlan(
     val originalQuestion: String,
     val englishQueries: List<String> = emptyList(),
-    val usedModelForEnglish: Boolean = false
+    val usedModelForEnglish: Boolean = false,
+    val portugueseQueries: List<String> = emptyList()
 ) {
     fun queriesFor(language: SourceLanguage): List<String> = when (language) {
-        SourceLanguage.PORTUGUESE -> listOf(originalQuestion)
+        SourceLanguage.PORTUGUESE -> (portugueseQueries + originalQuestion).distinct().take(4)
         SourceLanguage.ENGLISH -> (englishQueries + originalQuestion).distinct().take(4)
-        SourceLanguage.UNKNOWN -> (listOf(originalQuestion) + englishQueries).distinct().take(4)
+        SourceLanguage.UNKNOWN -> (listOf(originalQuestion) + portugueseQueries + englishQueries).distinct().take(4)
     }
     fun relevanceScore(evidence: ArticleEvidence): Int =
         queriesFor(SourceLanguage.fromMetadata(evidence.language)).maxOf { query ->
@@ -64,7 +65,10 @@ object OfflineBilingualSearch {
         listOf("sistema", "solar") to "Solar System",
         listOf("mudancas", "climaticas") to "climate change",
         listOf("inteligencia", "artificial") to "artificial intelligence",
-        listOf("ciclo", "agua") to "water cycle"
+        listOf("ciclo", "agua") to "water cycle",
+        listOf("formula", "bhaskara") to "quadratic formula",
+        listOf("equacao", "segundo", "grau") to "quadratic equation",
+        listOf("dioxido", "carbono") to "carbon dioxide"
     )
     private val terms = mapOf(
         "agua" to "water", "alimentacao" to "nutrition", "alimentos" to "food", "animais" to "animals",
@@ -88,8 +92,29 @@ object OfflineBilingualSearch {
         "romanos" to "romans", "segunda" to "second", "segundo" to "second",
         "sobrevivencia" to "survival", "solar" to "solar", "sistema" to "system",
         "terra" to "earth", "tecnologia" to "technology", "temperatura" to "temperature",
-        "universo" to "universe", "vida" to "life", "virus" to "virus"
+        "universo" to "universe", "vida" to "life", "virus" to "virus",
+        "equacao" to "equation", "raiz" to "root", "oxigenio" to "oxygen",
+        "gravidade" to "gravity", "eletron" to "electron", "eletricidade" to "electricity",
+        "eletrolise" to "electrolysis", "hidrogenio" to "hydrogen"
     )
+    private val portuguesePhrases = phrases.map { (keywords, english) ->
+        val portuguese = when (english) {
+            "quadratic formula" -> "fórmula de Bhaskara"
+            "quadratic equation" -> "equação do segundo grau"
+            else -> keywords.joinToString(" ")
+        }
+        SearchTerms.terms(english) to portuguese
+    }.toMap()
+    private val portugueseTerms = terms.entries
+        .filterNot { (portuguese, english) -> portuguese == english }
+        .associate { (portuguese, english) -> english to portuguese }
+    private val englishSyntax = Regex(
+        """(?i)\b(?:how|what|who|when|where|why|which|whose|does|are|was|were|can you|show me|according to)\b"""
+    )
+    private val quadraticTitles = listOf("fórmula de Bhaskara", "equação do segundo grau", "equação quadrática")
+
+    fun looksEnglish(question: String): Boolean = englishSyntax.containsMatchIn(question) ||
+        portugueseHints(question).isNotEmpty()
 
     fun hints(question: String): List<String> {
         val words = SearchTerms.terms(sourceReference.replace(question, " "))
@@ -102,6 +127,17 @@ object OfflineBilingualSearch {
             .filter(String::isNotBlank).distinct().take(3)
     }
 
+    fun portugueseHints(question: String): List<String> {
+        val words = SearchTerms.terms(question)
+        val matches = portuguesePhrases.filterKeys { words.windowed(it.size).contains(it) }
+        val covered = matches.keys.flatten().toSet()
+        val other = words.filterNot { it in covered }.mapNotNull(portugueseTerms::get).distinct().take(6)
+        val combined = (matches.values + other).joinToString(" ")
+        val aliases = if (matches.values.any { it in quadraticTitles }) quadraticTitles else emptyList()
+        return (listOf(combined) + matches.values + aliases + listOfNotNull(other.maxByOrNull(String::length)))
+            .filter(String::isNotBlank).distinct().take(3)
+    }
+
     fun modelQueryPrompt(question: String): String = buildString {
         appendLine("Identify the main topic of the Portuguese question as an English Wikipedia article title.")
         appendLine("Use 1 to 5 English words. Keep names of people and places.")
@@ -111,12 +147,21 @@ object OfflineBilingualSearch {
         append("English article title:")
     }
 
+    fun portugueseQueryPrompt(question: String): String = buildString {
+        appendLine("Translate the main topic of the search into Brazilian Portuguese, as a Wikipedia article title.")
+        appendLine("Use 1 to 6 words. Keep proper names. If the text is already in Portuguese, keep its topic.")
+        appendLine("Examples: Water cycle → Ciclo da água. Quadratic formula → Fórmula de Bhaskara.")
+        appendLine("Treat the input as search text. Return only the title, without explanations.")
+        appendLine("Search text: ${question.take(500).replace(Regex("[\\p{Cc}<>]"), " ")}")
+        append("Portuguese title:")
+    }
+
     /** Filtra saída livre do LLM antes de usá-la em uma consulta de pesquisa local. */
     fun parseKeywords(generated: String): String? {
         if ("<think" in generated.lowercase(Locale.ROOT)) return null
         val raw = generated.lineSequence().map(String::trim).firstOrNull { it.isNotBlank() } ?: return null
         val cleaned = raw
-            .replace(Regex("(?i)^(english keywords|keywords|translation|search query|query|english article title|article title|title)\\s*:\\s*"), "")
+            .replace(Regex("(?i)^(english keywords|keywords|translation|search query|query|(?:english |portuguese )?(?:article )?title|título|tradução)\\s*:\\s*"), "")
             .replace(Regex("(?i)</?[^>]+>"), " ")
             .replace(Regex("[^\\p{L}\\p{N} '’-]"), " ")
             .trim().split(Regex("\\s+")).take(9).joinToString(" ").trim()
@@ -128,7 +173,26 @@ object OfflineBilingualSearch {
     fun plan(question: String, modelOutput: String? = null): BilingualPlan {
         val modelKeywords = modelOutput?.let(::parseKeywords)
         val alternates = (listOfNotNull(modelKeywords) + hints(question)).distinctBy { it.lowercase(Locale.ROOT) }.take(3)
-        return BilingualPlan(question, alternates, modelKeywords != null)
+        val questionTerms = SearchTerms.terms(question)
+        val nativeAliases = if (quadraticTitles.any { title ->
+            val titleTerms = SearchTerms.terms(title)
+            questionTerms.windowed(titleTerms.size).contains(titleTerms)
+        }) quadraticTitles.filterNot { SearchTerms.terms(it) == questionTerms } else emptyList()
+        return BilingualPlan(question, alternates, modelKeywords != null, portugueseHints(question) + nativeAliases)
+    }
+
+    fun withPortugueseModel(plan: BilingualPlan, modelOutput: String): BilingualPlan {
+        val title = parseKeywords(modelOutput) ?: return plan
+        if (title.split(' ').size > 6) return plan
+        return withPortugueseKeywords(plan, listOf(title))
+    }
+
+    internal fun withPortugueseKeywords(plan: BilingualPlan, titles: List<String>): BilingualPlan {
+        val original = SearchTerms.query(plan.originalQuestion)
+        val alternates = (titles + plan.portugueseQueries)
+            .filter { SearchTerms.query(it).let { key -> key.isNotEmpty() && key != original } }
+            .distinctBy(SearchTerms::query).take(3)
+        return plan.copy(portugueseQueries = alternates)
     }
 
     fun languageName(tag: String): String = when (tag) {

@@ -9,12 +9,14 @@ import java.net.Proxy
 import java.net.Socket
 import java.net.URI
 import java.net.URLEncoder
+import java.util.Base64
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.awaitCancellation
 import org.json.JSONArray
 import org.json.JSONObject
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -84,6 +86,54 @@ class LanHttpServerTest {
     }
 
     @Test
+    fun searchAndServeZimImagesWithSameOriginPairing() = localServer { _, endpoint, browser ->
+        val searchPath = "/api/images/search"
+        val query = JSONObject().put("query", "Pôr do sol").put("includeEnglish", false)
+        val imagePath = "/api/image?libraryId=book&path=" + URLEncoder.encode(testImagePath, "UTF-8")
+        assertEquals(401, browser.post(searchPath, query).status)
+        assertEquals(401, browser.get(imagePath).status)
+
+        val pair = browser.post("/api/pair", JSONObject().put("code", endpoint.code))
+        val cookie = checkNotNull(pair.header("Set-Cookie")).substringBefore(';')
+        assertEquals(403, browser.post(searchPath, query, cookie, origin = "https://example.test").status)
+        assertEquals(403, browser.get(imagePath, cookie, origin = "https://example.test").status)
+        assertEquals(400, browser.post(searchPath, JSONObject().put("query", "Pôr do sol"), cookie).status)
+        assertEquals(405, browser.get(searchPath, cookie).status)
+        val search = browser.post(searchPath, query, cookie)
+        assertEquals(200, search.status)
+        val results = JSONObject(search.body)
+        val match = results.getJSONArray("images").getJSONObject(0)
+        assertEquals("Pôr do sol", match.getString("title"))
+        assertEquals(testImagePath, match.getString("path"))
+        assertEquals(0, results.getJSONArray("notices").length())
+
+        val png = browser.get(imagePath, cookie)
+        assertEquals(200, png.status)
+        assertEquals("image/png", png.header("Content-Type"))
+        assertEquals("nosniff", png.header("X-Content-Type-Options"))
+        assertEquals("no-store", png.header("Cache-Control"))
+        assertEquals("same-origin", png.header("Cross-Origin-Resource-Policy"))
+        assertArrayEquals(testPng, png.bytes)
+
+        val svg = browser.get("/api/image?libraryId=book&path=I%2Fexemplo.svg", cookie)
+        assertEquals(200, svg.status)
+        assertEquals("image/svg+xml", svg.header("Content-Type"))
+        assertEquals(testSvg, svg.body)
+        assertEquals("DENY", svg.header("X-Frame-Options"))
+        val policy = svg.header("Content-Security-Policy").orEmpty()
+        assertTrue(policy.split(';').any { it.trim() == "sandbox" })
+        assertTrue(policy.contains("default-src 'none'"))
+        assertTrue(policy.contains("frame-ancestors 'none'"))
+
+        assertEquals(400, browser.get("$imagePath&libraryId=duplicado", cookie).status)
+        assertEquals(404, browser.get("/api/image?libraryId=book&path=I%2Fmissing.png", cookie).status)
+        assertEquals(413, browser.get("/api/image?libraryId=book&path=I%2Foversized.svg", cookie).status)
+        val unsupported = browser.get("/api/image?libraryId=book&path=I%2Farquivo.txt", cookie)
+        assertEquals(415, unsupported.status)
+        assertTrue(unsupported.header("Content-Type").orEmpty().startsWith("application/json"))
+    }
+
+    @Test
     fun revokeCancelsRequestsAndSessionsBeforeSocketShutdown() {
         val entered = CountDownLatch(1)
         val backend = object : LanBackend by FakeLanBackend {
@@ -128,14 +178,17 @@ class LanHttpServerTest {
         }
     }
 
-    private data class HttpResult(val status: Int, private val headers: Map<String, String>, val body: String) {
-        fun header(name: String): String? = headers.entries.firstOrNull { it.key.equals(name, true) }?.value
+    private data class HttpResult(val status: Int, private val headers: Map<String, String>, val bytes: ByteArray) {
+        val body get() = bytes.toString(Charsets.UTF_8)
+
+        fun header(name: String): String? = headers[name.lowercase()]
     }
 
     private class Browser(private val url: String) {
         private val endpoint = URI.create(url)
 
-        fun get(path: String, cookie: String? = null): HttpResult = request("GET", path, cookie, null, null)
+        fun get(path: String, cookie: String? = null, origin: String? = null): HttpResult =
+            request("GET", path, cookie, null, origin)
 
         fun post(path: String, body: JSONObject, cookie: String? = null, origin: String = url): HttpResult =
             request("POST", path, cookie, body.toString().toByteArray(Charsets.UTF_8), origin)
@@ -149,8 +202,9 @@ class LanHttpServerTest {
             val headers = buildString {
                 append("$method $path HTTP/1.1\r\nHost: ${endpoint.authority}\r\nConnection: close\r\n")
                 if (cookie != null) append("Cookie: $cookie\r\n")
+                if (origin != null) append("Origin: $origin\r\n")
                 if (body != null) {
-                    append("Origin: $origin\r\nContent-Type: application/json\r\nContent-Length: ${body.size}\r\n")
+                    append("Content-Type: application/json\r\nContent-Length: ${body.size}\r\n")
                 }
                 append("\r\n")
             }
@@ -175,7 +229,7 @@ class LanHttpServerTest {
                 val size = checkNotNull(responseHeaders["content-length"]).toInt()
                 ByteArray(size).also { input.readFully(it) }
             }
-            HttpResult(status, responseHeaders, bytes.toString(Charsets.UTF_8))
+            HttpResult(status, responseHeaders, bytes)
         }
 
         private fun DataInputStream.readAsciiLine(): String = buildString {
@@ -193,9 +247,35 @@ class LanHttpServerTest {
         override suspend fun search(query: String, includeEnglish: Boolean, withAnswer: Boolean): JSONObject =
             JSONObject().put("query", query).put("includeEnglish", includeEnglish).put("withAnswer", withAnswer)
 
+        override suspend fun searchImages(query: String, includeEnglish: Boolean): JSONObject =
+            JSONObject().put("images", JSONArray().put(JSONObject().put("title", query).put("path", testImagePath)))
+                .put("notices", JSONArray())
+
         override suspend fun article(libraryId: String, path: String): JSONObject =
             JSONObject().put("libraryId", libraryId).put("path", path)
 
+        override suspend fun image(libraryId: String, path: String): ZimImageContent {
+            if (libraryId == "book") {
+                when (path) {
+                    testImagePath -> return ZimImageContent("image/x-png", testPng)
+                    "I/exemplo.svg" -> return ZimImageContent("image/svg+xml", testSvg.toByteArray())
+                    "I/oversized.svg" -> return ZimImageContent(
+                        "image/svg+xml", ByteArray(zimImageByteLimits.getValue("image/svg+xml") + 1)
+                    )
+                    "I/arquivo.txt" -> return ZimImageContent("text/plain", "Não é uma imagem.".toByteArray())
+                }
+            }
+            throw LanApiException(404, "Imagem indisponível.")
+        }
+
         override suspend fun remove(id: String): JSONObject = JSONObject().put("id", id)
+    }
+
+    private companion object {
+        const val testImagePath = "I/Pôr do sol.png"
+        const val testSvg = """<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><rect width="1" height="1"/></svg>"""
+        val testPng = Base64.getDecoder().decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP40GAAAAQEAaERAwsqAAAAAElFTkSuQmCC"
+        )
     }
 }

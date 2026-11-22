@@ -2,6 +2,7 @@ package com.wikiaioffline
 
 import android.content.Context
 import android.content.res.AssetFileDescriptor
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.text.Html
 import kotlinx.coroutines.CancellationException
@@ -11,9 +12,12 @@ import org.kiwix.libkiwix.JNIKiwix
 import org.kiwix.libzim.Archive
 import org.kiwix.libzim.Entry
 import org.kiwix.libzim.EntryNotFoundException
+import org.kiwix.libzim.Item
 import org.kiwix.libzim.Query
 import org.kiwix.libzim.Searcher
 import org.kiwix.libzim.SuggestionSearcher
+import org.jsoup.Jsoup
+import org.jsoup.nodes.Element
 import java.io.File
 import java.io.IOException
 import java.time.LocalDate
@@ -161,7 +165,93 @@ internal class ZimRepository private constructor(
         } catch (error: EntryNotFoundException) {
             throw IOException("O artigo não foi encontrado neste acervo.", error)
         }
-        return read(entry) ?: throw IOException("O artigo não contém texto legível ou é grande demais.")
+        return read(entry, includeImages = true)
+            ?: throw IOException("O artigo não contém conteúdo legível ou é grande demais.")
+    }
+
+    fun readImage(path: String): ZimImageContent {
+        val image = imageAt(path) ?: throw IOException("A imagem não está disponível neste acervo.")
+        val bytes = itemBytes(image.item)
+        val limit = zimImageByteLimits.getValue(image.mimeType)
+        if (bytes.size !in 1..limit) throw IOException("A imagem do acervo excede o tamanho permitido.")
+        if (image.mimeType == SVG_MIME_TYPE) {
+            return ZimImageContent(image.mimeType, sanitizeSvg(bytes))
+        }
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        if (bounds.outWidth !in 1..MAX_IMAGE_DIMENSION || bounds.outHeight !in 1..MAX_IMAGE_DIMENSION ||
+            bounds.outWidth.toLong() * bounds.outHeight > MAX_IMAGE_PIXELS ||
+            zimImageMimeType(bounds.outMimeType.orEmpty()) != image.mimeType
+        ) throw IOException("A imagem do acervo está inválida ou possui dimensões excessivas.")
+        return ZimImageContent(image.mimeType, bytes)
+    }
+
+    suspend fun findImages(queries: List<String>, limit: Int): List<RankedZimImage> {
+        val search = queries.map(String::trim).filter(String::isNotBlank).distinct().take(4)
+        if (search.isEmpty()) return emptyList()
+        val candidates = LinkedHashMap<String, Entry>()
+        val images = LinkedHashMap<String, RankedZimImage>()
+        fun addCandidate(entry: Entry) {
+            if (candidates.size < MAX_IMAGE_ARTICLES) candidates.putIfAbsent(entry.path, entry)
+        }
+
+        val titles = search.flatMap(::candidateTitles).distinct().take(12)
+        for (candidate in titles) {
+            currentCoroutineContext().ensureActive()
+            availableEntry { if (archive.hasEntryByTitle(candidate)) archive.getEntryByTitle(candidate) else null }
+                ?.let(::addCandidate)
+        }
+        if (archive.hasFulltextIndex() && candidates.size < MAX_IMAGE_ARTICLES) {
+            val indexQueries = search.flatMap {
+                listOf(SearchTerms.query(it), SearchTerms.terms(it).take(2).joinToString(" "))
+            }.filter(String::isNotBlank).distinct().take(6)
+            try {
+                searchIndex(indexQueries, 4) { addCandidate(it) }
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+            }
+        }
+        if (candidates.size < 4) {
+            try {
+                suggestTitles(titles.take(3), 4) { addCandidate(it) }
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+            }
+        }
+        for (entry in candidates.values) {
+            currentCoroutineContext().ensureActive()
+            availableEntry { articleBody(entry) }?.takeIf { it.html }?.let { article ->
+                for (result in imagesFromArticle(article, search)) {
+                    val previous = images[result.image.path]
+                    if (previous == null || result.score > previous.score) images[result.image.path] = result
+                }
+            }
+            availableEntry { imageItem(entry) }?.let { item ->
+                val result = directImage(item, search)
+                images.putIfAbsent(result.image.path, result)
+            }
+        }
+        if (images.size < limit) {
+            for (prefix in imageSearchPrefixes(search)) {
+                currentCoroutineContext().ensureActive()
+                val matches = availableEntry { archive.findByPath(prefix) } ?: continue
+                try {
+                    for (index in 0 until 4) {
+                        currentCoroutineContext().ensureActive()
+                        if (!matches.hasNext()) break
+                        val item = availableEntry { imageItem(matches.next()) } ?: continue
+                        val result = directImage(item, search)
+                        images.putIfAbsent(result.image.path, result)
+                    }
+                } catch (error: Exception) {
+                    if (error is CancellationException) throw error
+                } finally {
+                    matches.dispose()
+                }
+                if (images.size >= limit) break
+            }
+        }
+        return images.values.sortedByDescending { it.score }.take(limit)
     }
 
     fun close() {
@@ -245,22 +335,133 @@ internal class ZimRepository private constructor(
         }
     }
 
-    data class ArticleText(val title: String, val path: String, val text: String)
+    data class ArticleText(
+        val title: String,
+        val path: String,
+        val text: String,
+        val images: List<ZimImage> = emptyList()
+    )
 
-    private fun read(entry: Entry): ArticleText? {
+    private data class ArticleBody(val title: String, val path: String, val source: String, val html: Boolean)
+
+    private data class ImageItem(val item: Item, val mimeType: String)
+
+    private fun articleBody(entry: Entry): ArticleBody? {
         val item = entry.getItem(true)
         val mimeType = item.mimetype.substringBefore(';').trim().lowercase(Locale.ROOT)
         if (mimeType !in readableMimeTypes || item.size !in 1..MAX_ARTICLE_BYTES) return null
+        val source = itemBytes(item).toString(Charsets.UTF_8)
+        return ArticleBody(item.title.ifBlank { entry.title }, item.path, source, mimeType != "text/plain")
+    }
+
+    private fun read(entry: Entry, includeImages: Boolean = false): ArticleText? {
+        val article = articleBody(entry) ?: return null
+        val text = if (article.html) articleText(article.source) else article.source.trim()
+        val images = if (includeImages && article.html) {
+            imagesFromArticle(article, emptyList()).take(MAX_ARTICLE_PREVIEW_IMAGES).map { it.image }
+        } else emptyList()
+        if (text.none(Char::isLetterOrDigit)) {
+            if (images.isEmpty()) return null
+            return ArticleText(article.title, article.path, "Este artigo contém imagens.", images)
+        }
+        return ArticleText(article.title, article.path, text, images)
+    }
+
+    private fun imagesFromArticle(article: ArticleBody, queries: List<String>): List<RankedZimImage> {
+        val found = LinkedHashMap<String, RankedZimImage>()
+        val contextScore = queries.maxOfOrNull { SearchTerms.score(it, article.title, "") } ?: 0
+        val inspected = mutableMapOf<String, ImageItem?>()
+        for (element in Jsoup.parse(article.source).select("img").take(MAX_IMG_TAGS_PER_ARTICLE)) {
+            val item = imageSources(element).asSequence()
+                .flatMap { localZimImagePaths(article.path, it).asSequence() }
+                .firstNotNullOfOrNull { path ->
+                    if (path in inspected) inspected[path] else imageAt(path).also { inspected[path] = it }
+                } ?: continue
+            val path = item.item.path
+            val caption = element.closest("figure, .thumbinner, .thumb, .gallerybox")
+                ?.selectFirst("figcaption, .thumbcaption, .gallerytext")?.text()
+            val labels = listOf(caption, element.attr("alt"), element.attr("title"))
+                .mapNotNull { cleanZimMetadata(it, 240) }.distinct()
+            val title = labels.firstOrNull() ?: imageLabel(item.item)
+            val searchableText = (labels + imageLabel(item.item) + path).joinToString(" ")
+            val score = queries.maxOfOrNull { SearchTerms.score(it, title, searchableText) } ?: 0
+            val candidate = ZimImage(id, path, title, article.title, article.path, this.title)
+            val result = RankedZimImage(candidate, score * 4 + contextScore + 2)
+            val previous = found[path]
+            if (previous == null || result.score > previous.score) found[path] = result
+            if (queries.isEmpty() && found.size >= MAX_ARTICLE_PREVIEW_IMAGES) break
+        }
+        return found.values.toList()
+    }
+
+    private fun imageSources(element: Element): List<String> {
+        val srcsets = listOf(element.attr("srcset"), element.attr("data-srcset")) +
+            element.closest("picture")?.select("source[srcset]").orEmpty().take(3).map { it.attr("srcset") }
+        val variants = srcsets.filterNot { it.trimStart().startsWith("data:", ignoreCase = true) }
+            .flatMap { it.split(',').take(3).map { candidate -> candidate.trim().substringBefore(' ') } }
+        val candidates = listOf(element.attr("data-src"), element.attr("src")) + variants
+        return candidates.filter(String::isNotBlank).distinct()
+    }
+
+    private fun directImage(item: ImageItem, queries: List<String>): RankedZimImage {
+        val label = imageLabel(item.item)
+        val path = item.item.path
+        val score = queries.maxOfOrNull { SearchTerms.score(it, label, path) } ?: 0
+        return RankedZimImage(ZimImage(id, path, label, null, null, title), score * 4)
+    }
+
+    private fun imageSearchPrefixes(queries: List<String>): List<String> {
+        val stems = queries.flatMap {
+            val words = SearchTerms.terms(it)
+            listOf(words.take(3).joinToString("_"), words.firstOrNull().orEmpty())
+        }.filter { it.length >= 3 }.distinct().take(3)
+        return stems.flatMap { stem ->
+            val capitalized = stem.replaceFirstChar { it.titlecase(Locale.ROOT) }
+            listOf(stem, capitalized).distinct().flatMap { path ->
+                listOf(path, "I/$path", "images/$path", "media/$path", "assets/$path")
+            }
+        }
+    }
+
+    private fun imageLabel(item: Item): String {
+        val fallback = item.path.substringAfterLast('/').substringBeforeLast('.').replace('_', ' ')
+        return cleanZimMetadata(item.title, 160)?.takeUnless { it == item.path || it == item.path.substringAfterLast('/') }
+            ?: cleanZimMetadata(fallback, 160) ?: "Imagem do acervo"
+    }
+
+    private fun imageAt(path: String): ImageItem? = availableEntry {
+        if (!validZimImagePath(path) || !archive.hasEntryByPath(path)) null
+        else imageItem(archive.getEntryByPath(path))
+    }
+
+    private fun imageItem(entry: Entry): ImageItem? {
+        val item = entry.getItem(true)
+        val mimeType = zimImageMimeType(item.mimetype)
+        val limit = zimImageByteLimits[mimeType] ?: return null
+        if (!validZimImagePath(item.path) || item.size !in 1L..limit.toLong()) return null
+        return ImageItem(item, mimeType)
+    }
+
+    private fun itemBytes(item: Item): ByteArray {
         val blob = item.data
-        val source = try { blob.data.toString(Charsets.UTF_8) } finally { blob.dispose() }
-        val text = if (mimeType == "text/plain") source.trim() else articleText(source)
-        if (text.none(Char::isLetterOrDigit)) return null
-        return ArticleText(item.title.ifBlank { entry.title }, item.path, text)
+        return try { blob.data } finally { blob.dispose() }
+    }
+
+    private inline fun <T> availableEntry(read: () -> T): T? = try {
+        read()
+    } catch (error: Exception) {
+        if (error is CancellationException) throw error
+        null
     }
 
     companion object {
         private const val MAX_ARTICLE_BYTES = 4L * 1024 * 1024
         private const val MAX_METADATA_BYTES = 32L * 1024
+        private const val MAX_IMAGE_ARTICLES = 8
+        private const val MAX_IMG_TAGS_PER_ARTICLE = 80
+        private const val MAX_ARTICLE_PREVIEW_IMAGES = 12
+        private const val MAX_IMAGE_DIMENSION = 8192
+        private const val MAX_IMAGE_PIXELS = 16_000_000L
         private val readableMimeTypes = setOf("text/plain", "text/html", "application/xhtml+xml")
         private val askPrefix = Regex(
             "(?i)^(o que ([ée]|foi|era|s[ãa]o|foram)|quem ([ée]|foi|era)|me (explique|fale sobre|conte sobre)|" +

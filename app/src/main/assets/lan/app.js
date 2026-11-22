@@ -8,11 +8,16 @@ const pairSubmit = byId("pair-submit");
 const searchQuery = byId("search-query");
 const searchSubmit = byId("search-submit");
 const generateAnswer = byId("generate-answer");
+const imageQuery = byId("image-query");
+const imageSubmit = byId("image-submit");
+const imageDialog = byId("image-dialog");
+const imagePreview = byId("image-preview");
+const imagePreviewArticle = byId("image-preview-article");
 const articleDialog = byId("article-dialog");
 const removeDialog = byId("remove-dialog");
 const removeConfirm = byId("remove-confirm");
 const removeCancel = byId("remove-cancel");
-const destinations = new Set(["library", "search"]);
+const panelFocus = new Map([["library", byId("library-title")], ["search", searchQuery], ["images", imageQuery]]);
 const languageNames = { pt: "Português", en: "Inglês" };
 const dateFormat = new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium", timeZone: "UTC" });
 const networkError = "O WikiAI Offline está indisponível. Confira a conexão e a opção Acesso pela rede no Android.";
@@ -20,6 +25,8 @@ const networkError = "O WikiAI Offline está indisponível. Confira a conexão e
 let session = null;
 let catalogVersion = 0;
 let articleVersion = 0;
+let imageSearchVersion = 0;
+let imageSessionCheck = null;
 let lastSearch = null;
 let archiveToRemove = null;
 
@@ -56,6 +63,10 @@ function isAbort(error) {
   return error.name === "AbortError";
 }
 
+function expireSession(scope) {
+  if (scope === session) showPairing("Sessão encerrada. Digite um novo código para conectar.", true);
+}
+
 async function request(path, { body, scope = session } = {}) {
   const post = body !== undefined;
   let response;
@@ -74,7 +85,7 @@ async function request(path, { body, scope = session } = {}) {
   }
 
   if (response.status === 401 && scope) {
-    if (scope === session) showPairing("Sessão encerrada. Digite um novo código para conectar.", true);
+    expireSession(scope);
     throw new DOMException("Sessão encerrada", "AbortError");
   }
   const data = await response.json().catch(() => null);
@@ -88,18 +99,15 @@ async function request(path, { body, scope = session } = {}) {
 }
 
 function showPanel(name, focus = false) {
-  if (!destinations.has(name)) return;
-  for (const destination of destinations) {
+  if (!panelFocus.has(name)) return;
+  for (const destination of panelFocus.keys()) {
     byId(destination + "-panel").hidden = destination !== name;
   }
   for (const button of document.querySelectorAll(".nav-button")) {
     if (button.dataset.panel === name) button.setAttribute("aria-current", "page");
     else button.removeAttribute("aria-current");
   }
-  if (focus) {
-    if (name === "search") searchQuery.focus();
-    else byId("library-title").focus();
-  }
+  if (focus) panelFocus.get(name).focus();
 }
 
 function showPairing(message = "", focus = false) {
@@ -109,6 +117,7 @@ function showPairing(message = "", focus = false) {
   archiveToRemove = null;
   catalogVersion++;
   articleVersion++;
+  if (imageDialog.open) imageDialog.close();
   if (articleDialog.open) articleDialog.close();
   if (removeDialog.open) removeDialog.close();
   byId("catalog").replaceChildren();
@@ -116,9 +125,13 @@ function showPairing(message = "", focus = false) {
   byId("answer-text").textContent = "";
   byId("article-text").textContent = "";
   byId("article-title").textContent = "Fonte";
+  clearArticleImages();
   byId("remove-message").textContent = "";
   byId("search-notices").replaceChildren();
   byId("search-form").reset();
+  byId("image-form").reset();
+  clearImageResults();
+  clearImagePreview();
   byId("results-section").hidden = true;
   searchSubmit.disabled = false;
   generateAnswer.disabled = false;
@@ -272,7 +285,9 @@ function confirmRemoval(archive, title) {
 }
 
 removeCancel.addEventListener("click", () => removeDialog.close());
-removeDialog.addEventListener("close", () => { archiveToRemove = null; });
+removeDialog.addEventListener("close", () => {
+  if (!removeDialog.open) archiveToRemove = null;
+});
 removeDialog.addEventListener("cancel", (event) => {
   if (removeConfirm.disabled) event.preventDefault();
 });
@@ -291,6 +306,7 @@ byId("remove-form").addEventListener("submit", async (event) => {
     byId("results-section").hidden = true;
     byId("source-list").replaceChildren();
     setStatus("search-status");
+    clearImageResults();
     setStatus("workspace-status", result?.notice || "Acervo removido.");
     await refreshCatalog();
   } catch (error) {
@@ -326,7 +342,7 @@ function renderResults(data) {
     const origin = [textValue(source.book), languageLabel(source.language)].filter(Boolean).join(" · ");
     item.append(node("h3", "", "[" + (index + 1) + "] " + title), node("p", "source-meta", origin));
     if (source.excerpt) item.append(node("p", "source-excerpt multiline", source.excerpt));
-    if (typeof source.libraryId === "string" && source.libraryId && typeof source.path === "string" && source.path) {
+    if (hasArchiveResource(source)) {
       const open = node("button", "button button-secondary", "Abrir fonte");
       open.type = "button";
       open.setAttribute("aria-label", "Abrir fonte " + title);
@@ -382,21 +398,226 @@ generateAnswer.addEventListener("click", async () => {
   }
 });
 
-articleDialog.addEventListener("close", () => { articleVersion++; });
+function hasArchiveResource(value) {
+  return typeof value?.libraryId === "string" && Boolean(value.libraryId)
+    && typeof value.path === "string" && Boolean(value.path);
+}
+
+function archiveUrl(endpoint, { libraryId, path }) {
+  return endpoint + "?" + new URLSearchParams({ libraryId, path });
+}
+
+function checkImageSession(scope) {
+  if (!scope || scope !== session) return Promise.resolve(false);
+  if (imageSessionCheck?.scope === scope) return imageSessionCheck.result;
+  const result = request("/api/session", { scope }).then((data) => {
+    if (data?.paired === false) expireSession(scope);
+    return data?.paired === true && scope === session;
+  }).catch(() => false).finally(() => {
+    if (imageSessionCheck?.result === result) imageSessionCheck = null;
+  });
+  imageSessionCheck = { scope, result };
+  return result;
+}
+
+function clearImageResults() {
+  imageSearchVersion++;
+  byId("image-results").hidden = true;
+  byId("image-list").replaceChildren();
+  byId("image-notices").replaceChildren();
+  imageSubmit.removeAttribute("aria-disabled");
+  setStatus("image-status");
+}
+
+function imageArticle(picture) {
+  const source = { libraryId: picture.libraryId, path: picture.articlePath };
+  return hasArchiveResource(source) ? source : null;
+}
+
+function imageOrigin(picture, title) {
+  return [textValue(picture.articleTitle), textValue(picture.book)]
+    .filter((value) => value && value !== title).join(" · ");
+}
+
+function pictureTitle(picture) {
+  return textValue(picture.title) || textValue(picture.articleTitle) || "Imagem do acervo";
+}
+
+function pictureThumbnail(picture, title, scope) {
+  const frame = node("div", "image-frame");
+  const image = node("img");
+  image.alt = title;
+  image.loading = "lazy";
+  image.decoding = "async";
+  image.addEventListener("error", () => {
+    if (!frame.isConnected) return;
+    frame.replaceChildren(node("p", "image-unavailable", "Imagem indisponível"));
+    void checkImageSession(scope);
+  }, { once: true });
+  image.src = archiveUrl("/api/image", picture);
+  frame.append(image);
+  return frame;
+}
+
+function renderImages(data) {
+  const pictures = Array.isArray(data?.images) ? data.images.filter(hasArchiveResource) : [];
+  const notices = Array.isArray(data?.notices) ? data.notices.filter((notice) => textValue(notice)) : [];
+  const scope = session;
+  byId("image-results").hidden = !pictures.length && !notices.length;
+  byId("image-notices").hidden = notices.length === 0;
+  byId("image-notices").replaceChildren(...notices.map((notice) => node("p", "", notice)));
+  setStatus("image-status", pictures.length === 1 ? "1 imagem encontrada."
+    : pictures.length ? pictures.length + " imagens encontradas." : "Nenhuma imagem encontrada.");
+
+  byId("image-list").replaceChildren(...pictures.map((picture) => {
+    const title = pictureTitle(picture);
+    const card = node("li", "image-card");
+
+    const details = node("div", "image-details");
+    details.append(node("h2", "", title));
+    const origin = imageOrigin(picture, title);
+    if (origin) details.append(node("p", "source-meta", origin));
+    const actions = node("div", "image-actions");
+    const preview = node("button", "button button-secondary", "Ampliar");
+    preview.type = "button";
+    preview.setAttribute("aria-label", "Ampliar imagem " + title);
+    preview.addEventListener("click", () => openImagePreview(picture, title));
+    actions.append(preview);
+    const source = imageArticle(picture);
+    if (source) {
+      const articleTitle = textValue(picture.articleTitle) || "Artigo de origem";
+      const article = node("button", "button button-secondary", "Abrir artigo");
+      article.type = "button";
+      article.setAttribute("aria-label", "Abrir artigo de origem de " + title);
+      article.addEventListener("click", () => openArticle(source, articleTitle));
+      actions.append(article);
+    }
+    details.append(actions);
+    card.append(pictureThumbnail(picture, title, scope), details);
+    return card;
+  }));
+}
+
+byId("image-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!session || imageSubmit.getAttribute("aria-disabled") === "true") return;
+  const query = imageQuery.value.trim();
+  if (!query) {
+    setStatus("image-status", "Digite um assunto para buscar imagens.", true);
+    imageQuery.focus();
+    return;
+  }
+  clearImageResults();
+  const version = imageSearchVersion;
+  imageSubmit.setAttribute("aria-disabled", "true");
+  setStatus("image-status", "Buscando imagens nos acervos…");
+  try {
+    const data = await request("/api/images/search", {
+      body: { query, includeEnglish: byId("image-include-english").checked }
+    });
+    if (version === imageSearchVersion) renderImages(data);
+  } catch (error) {
+    if (version === imageSearchVersion && !isAbort(error)) setStatus("image-status", error.message, true);
+  } finally {
+    if (version === imageSearchVersion) imageSubmit.removeAttribute("aria-disabled");
+  }
+});
+
+function clearImagePreview() {
+  imagePreview.hidden = true;
+  imagePreview.replaceChildren();
+  imagePreviewArticle.hidden = true;
+  imagePreviewArticle.onclick = null;
+  byId("image-preview-origin").textContent = "";
+  byId("image-dialog-title").textContent = "Imagem";
+  setStatus("image-dialog-status");
+}
+
+imageDialog.addEventListener("close", () => {
+  if (!imageDialog.open) clearImagePreview();
+});
+
+async function openImagePreview(picture, title) {
+  clearImagePreview();
+  const scope = session;
+  const image = node("img");
+  image.alt = title;
+  image.decoding = "async";
+  byId("image-dialog-title").textContent = title;
+  byId("image-preview-origin").textContent = imageOrigin(picture, title);
+  const source = imageArticle(picture);
+  if (source) {
+    imagePreviewArticle.hidden = false;
+    imagePreviewArticle.onclick = () => {
+      imageDialog.close();
+      void openArticle(source, textValue(picture.articleTitle) || "Artigo de origem");
+    };
+  }
+  setStatus("image-dialog-status", "Carregando imagem…");
+  image.addEventListener("load", () => {
+    if (!imageDialog.open || !image.isConnected) return;
+    imagePreview.hidden = false;
+    setStatus("image-dialog-status");
+  }, { once: true });
+  image.addEventListener("error", () => {
+    if (!imageDialog.open || !image.isConnected) return;
+    setStatus("image-dialog-status", "Não foi possível carregar a imagem deste acervo.", true);
+    void checkImageSession(scope);
+  }, { once: true });
+  imagePreview.replaceChildren(image);
+  imageDialog.showModal();
+  const paired = await checkImageSession(scope);
+  if (!imageDialog.open || !image.isConnected) return;
+  if (paired) image.src = archiveUrl("/api/image", picture);
+  else setStatus("image-dialog-status", "Não foi possível verificar a sessão no Android.", true);
+}
+
+articleDialog.addEventListener("close", () => {
+  if (articleDialog.open) return;
+  articleVersion++;
+  clearArticleImages();
+});
+
+byId("article-image-jump").addEventListener("click", () => byId("article-images-title").focus());
+
+function clearArticleImages() {
+  byId("article-images").hidden = true;
+  byId("article-image-jump").hidden = true;
+  byId("article-image-list").replaceChildren();
+}
+
+function renderArticleImages(pictures, hasText, scope) {
+  byId("article-images").hidden = pictures.length === 0;
+  byId("article-image-jump").hidden = pictures.length === 0 || !hasText;
+  byId("article-image-list").replaceChildren(...pictures.map((picture) => {
+    const title = pictureTitle(picture);
+    const figure = node("figure", "article-image");
+    figure.append(pictureThumbnail(picture, title, scope), node("figcaption", "", title));
+    return figure;
+  }));
+}
+
 async function openArticle(source, title) {
   const version = ++articleVersion;
+  const scope = session;
   byId("article-title").textContent = title;
   byId("article-text").textContent = "";
+  clearArticleImages();
   setStatus("article-status", "Abrindo a fonte…");
   articleDialog.showModal();
-  const parameters = new URLSearchParams({ libraryId: source.libraryId, path: source.path });
   try {
-    const data = await request("/api/article?" + parameters);
+    const data = await request(archiveUrl("/api/article", source));
     if (version !== articleVersion || !articleDialog.open) return;
     byId("article-title").textContent = textValue(data?.title) || title;
     const article = textValue(data?.text);
+    const pictures = Array.isArray(data?.images)
+      ? data.images.filter((picture) => hasArchiveResource(picture) && picture.libraryId === source.libraryId)
+      : [];
     byId("article-text").textContent = article;
-    if (!article) setStatus("article-status", "O artigo não tem texto disponível.");
+    renderArticleImages(pictures, Boolean(article), scope);
+    if (!article) setStatus("article-status", pictures.length
+      ? "Sem texto disponível. Veja as imagens do artigo abaixo."
+      : "O artigo não tem texto disponível.");
     else setStatus("article-status", data?.shortened === true ? "Exibindo o início do artigo." : "");
   } catch (error) {
     if (version === articleVersion && !isAbort(error)) setStatus("article-status", error.message, true);

@@ -36,6 +36,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Stop
@@ -127,12 +128,17 @@ private fun WikiApp(wiki: WikiViewModel) {
     var question by rememberSaveable { mutableStateOf("") }
     var showLibrary by rememberSaveable { mutableStateOf(false) }
     var showLan by rememberSaveable { mutableStateOf(false) }
+    var showImages by rememberSaveable { mutableStateOf(false) }
+    var imageTarget by remember { mutableStateOf<WikiImageTarget?>(null) }
     var confirm by remember { mutableStateOf<Confirmation?>(null) }
     val openZims = rememberLauncherForActivityResult(remember { OpenLocalDocuments() }) {
         wiki.addLibraries(it)
     }
     val selectModel = rememberLauncherForActivityResult(remember { OpenLocalDocument() }) {
         if (it != null) wiki.chooseModel(it)
+    }
+    val selectImage = rememberLauncherForActivityResult(remember { OpenLocalDocument() }) {
+        if (it != null) imageTarget = WikiImageTarget.Device(it)
     }
     val scroll = rememberLazyListState()
     val work = wiki.operation
@@ -269,6 +275,10 @@ private fun WikiApp(wiki: WikiViewModel) {
                     }
                 }
             }
+            TextButton(onClick = { showImages = true }, modifier = Modifier.padding(start = 14.dp)) {
+                Icon(Icons.Filled.Collections, null, modifier = Modifier.size(18.dp))
+                Text("Imagens", Modifier.padding(start = 8.dp))
+            }
             Row(
                 Modifier.fillMaxWidth().padding(start = 14.dp, end = 12.dp, top = 8.dp, bottom = 12.dp),
                 verticalAlignment = Alignment.Bottom,
@@ -316,7 +326,23 @@ private fun WikiApp(wiki: WikiViewModel) {
         )
     }
     if (showLan) LanAccessDialog(wiki, onClose = { showLan = false })
-    wiki.article?.let { preview -> ArticleDialog(preview, wiki::closeArticle) }
+    if (showImages) {
+        WikiImageSearchDialog(
+            wiki, onPick = { selectImage.launch(arrayOf("image/*")) },
+            onPreview = { imageTarget = WikiImageTarget.Archive(it) },
+            onClose = { showImages = false; wiki.cancelImageSearch() }
+        )
+    }
+    wiki.article?.let { preview ->
+        ArticleDialog(preview, onImage = { imageTarget = WikiImageTarget.Archive(it) }, onClose = wiki::closeArticle)
+    }
+    imageTarget?.let { target ->
+        WikiImagePreviewDialog(wiki, target, onOpenArticle = { source ->
+            imageTarget = null
+            showImages = false
+            wiki.openArticle(source)
+        }, onClose = { imageTarget = null })
+    }
     confirm?.let { item ->
         AlertDialog(
             onDismissRequest = { confirm = null },
@@ -480,7 +506,7 @@ private fun ChatBubble(message: ChatMessage, openSource: (ArticleEvidence) -> Un
 }
 
 @Composable
-private fun ArticleDialog(preview: ArticlePreview, onClose: () -> Unit) {
+private fun ArticleDialog(preview: ArticlePreview, onImage: (ZimImage) -> Unit, onClose: () -> Unit) {
     AlertDialog(
         onDismissRequest = onClose,
         title = { Text(preview.source.title, maxLines = 3, overflow = TextOverflow.Ellipsis) },
@@ -504,6 +530,12 @@ private fun ArticleDialog(preview: ArticlePreview, onClose: () -> Unit) {
                 }
                 if (preview.shortened) {
                     item { Text("A prévia foi abreviada. Consulte o ZIM no Kiwix para ler o restante.", color = Muted) }
+                }
+                if (preview.images.isNotEmpty()) {
+                    item { Text("Imagens da fonte", style = MaterialTheme.typography.titleSmall) }
+                    items(preview.images) { image ->
+                        TextButton(onClick = { onImage(image) }) { Text(image.title) }
+                    }
                 }
             }
         },

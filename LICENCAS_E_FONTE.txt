@@ -14,6 +14,13 @@ WIKIAI OFFLINE | COMPONENTES DE TERCEIROS
   https://github.com/NanoHttpd/nanohttpd/blob/nanohttpd-project-2.3.1/LICENSE.md
 - ZXing Core 3.5.3, sob licença Apache 2.0.
   https://github.com/zxing/zxing/blob/zxing-3.5.3/LICENSE
+- jsoup 1.21.2, sob licença MIT. https://jsoup.org/license
+- AndroidSVG 1.4, sob licença Apache 2.0.
+  https://github.com/BigBadaboom/androidsvg/blob/master/LICENSE
+- Dicionário inglês–português WikDict, por Karl Bartel, extraído do
+  Wikcionário via DBnary. O TSV derivado é distribuído sob CC BY-SA 4.0.
+  O APK inclui a atribuição e as alterações em
+  assets/english-portuguese.LICENSE.txt. https://www.wikdict.com/page/about
 - Kotlin, Compose, AndroidX e as demais dependências permanecem sob
   suas licenças próprias.
 - Os acervos ZIM são fornecidos pelo usuário. Os textos e imagens

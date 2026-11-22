@@ -50,6 +50,9 @@
         <button type="button" class="nav-button" data-panel="search" aria-controls="search-panel">
           <span class="icon icon-search" aria-hidden="true"></span> Pesquisa
         </button>
+        <button type="button" class="nav-button" data-panel="images" aria-controls="images-panel">
+          <span class="icon icon-image" aria-hidden="true"></span> Imagens
+        </button>
       </nav>
       <div class="sidebar-end">
         <span class="connection"><span aria-hidden="true"></span> Rede local</span>
@@ -113,9 +116,44 @@
           <ol id="source-list" class="source-list"></ol>
         </section>
       </section>
+
+      <section id="images-panel" aria-labelledby="images-title" hidden>
+        <div class="search-intro">
+          <h1 id="images-title">Buscar imagens</h1>
+          <p>Encontre imagens nos acervos ZIM e consulte o artigo de origem.</p>
+        </div>
+        <form id="image-form" class="search-form">
+          <label for="image-query">Assunto da imagem</label>
+          <div class="search-input-row">
+            <input id="image-query" name="query" type="search" placeholder="Ex.: mandacaru"
+                   maxlength="600" autocomplete="off" required>
+            <button id="image-submit" class="button button-primary" type="submit">Buscar imagens</button>
+          </div>
+          <label class="checkbox"><input id="image-include-english" name="include-english" type="checkbox" checked> Incluir acervos em inglês</label>
+        </form>
+        <p id="image-status" class="status search-status" role="status"></p>
+        <section id="image-results" class="image-results" aria-label="Resultados da busca de imagens" hidden>
+          <div id="image-notices" class="search-notices" hidden></div>
+          <ul id="image-list" class="image-grid" role="list"></ul>
+        </section>
+      </section>
     </main>
   </div>
 
+  <dialog id="image-dialog" class="dialog image-dialog" aria-labelledby="image-dialog-title">
+    <div class="dialog-header">
+      <h2 id="image-dialog-title">Imagem</h2>
+      <form method="dialog"><button class="button button-secondary" type="submit" autofocus>Fechar</button></form>
+    </div>
+    <div class="image-dialog-body">
+      <p id="image-dialog-status" class="status" role="status"></p>
+      <div id="image-preview" class="image-preview" hidden></div>
+      <div class="image-preview-footer">
+        <p id="image-preview-origin" class="source-meta"></p>
+        <button id="image-preview-article" class="button button-secondary" type="button" hidden>Abrir artigo de origem</button>
+      </div>
+    </div>
+  </dialog>
   <dialog id="article-dialog" class="dialog article-dialog" aria-labelledby="article-title">
     <div class="dialog-header">
       <h2 id="article-title">Fonte</h2>
@@ -123,7 +161,12 @@
     </div>
     <div class="article-body">
       <p id="article-status" class="status" role="status"></p>
+      <button id="article-image-jump" class="button button-secondary article-image-jump" type="button" hidden>Ver imagens do artigo</button>
       <p id="article-text" class="multiline"></p>
+      <section id="article-images" class="article-images" aria-labelledby="article-images-title" hidden>
+        <h3 id="article-images-title" tabindex="-1">Imagens do artigo</h3>
+        <div id="article-image-list" class="article-image-list"></div>
+      </section>
     </div>
   </dialog>
   <dialog id="remove-dialog" class="dialog remove-dialog" aria-labelledby="remove-title" aria-describedby="remove-message">

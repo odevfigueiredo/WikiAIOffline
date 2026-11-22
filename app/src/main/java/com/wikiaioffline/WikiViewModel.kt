@@ -27,17 +27,21 @@ internal data class WikiOperation(
 internal data class ArticlePreview(
     val source: ArticleEvidence,
     val text: String? = null,
-    val shortened: Boolean = false
+    val shortened: Boolean = false,
+    val images: List<ZimImage> = emptyList()
 )
 
 class WikiViewModel(application: Application) : AndroidViewModel(application) {
     private val zim = MultiLibraryRepository(application)
     private val model = ModelRepository(application)
-    private val queryEngine = WikiQueryEngine(zim, model)
+    private val queryEngine = WikiQueryEngine(zim, model, PortugueseLexicon {
+        application.assets.open("english-portuguese.tsv")
+    })
     private val history = ChatHistory(application)
     private val prefs = application.getSharedPreferences("wiki_preferences", 0)
     private var currentJob: Job? = null
     private var previewJob: Job? = null
+    private var imageSearchJob: Job? = null
     private var progressKey: Any? = null
     private var lanServer: LanHttpServer? = null
     private var lanStartJob: Job? = null
@@ -79,6 +83,14 @@ class WikiViewModel(application: Application) : AndroidViewModel(application) {
     internal var operation by mutableStateOf<WikiOperation?>(null)
         private set
     internal var article by mutableStateOf<ArticlePreview?>(null)
+        private set
+    internal var imageResults by mutableStateOf(emptyList<ZimImage>())
+        private set
+    internal var imageSearching by mutableStateOf(false)
+        private set
+    internal var imageSearchStatus by mutableStateOf("")
+        private set
+    internal var imageSearchNotice by mutableStateOf<String?>(null)
         private set
     internal var includeEnglish by mutableStateOf(prefs.getBoolean("include_english", true))
         private set
@@ -301,13 +313,13 @@ class WikiViewModel(application: Application) : AndroidViewModel(application) {
         closeArticle()
         article = ArticlePreview(source)
         previewJob = viewModelScope.launch {
-            val text = try {
-                zim.readArticle(source)
+            try {
+                val entry = zim.readArticleDetails(source)
+                val previewLimit = 48_000
+                article = ArticlePreview(source, entry.text.take(previewLimit), entry.text.length > previewLimit, entry.images)
             } catch (e: Exception) {
-                "Falha ao abrir a fonte. ${e.details()}"
+                article = ArticlePreview(source, "Falha ao abrir a fonte. ${e.details()}")
             }
-            val previewLimit = 48_000
-            article = ArticlePreview(source, text.take(previewLimit), text.length > previewLimit)
         }
     }
 
@@ -315,6 +327,37 @@ class WikiViewModel(application: Application) : AndroidViewModel(application) {
         previewJob?.cancel()
         article = null
     }
+
+    internal fun searchImages(query: String) {
+        val text = query.trim().take(WikiRag.MAX_QUESTION_LENGTH)
+        if (text.isEmpty() || imageSearching || !hasSearchableLibrary) return
+        imageSearching = true
+        imageResults = emptyList()
+        imageSearchNotice = null
+        imageSearchStatus = "Procurando imagens nos acervos"
+        val english = includeEnglish
+        imageSearchJob = viewModelScope.launch {
+            try {
+                val result = queryEngine.searchImages(text, english) { status, _ -> imageSearchStatus = status }
+                imageResults = result.images
+                imageSearchNotice = if (result.images.isEmpty()) {
+                    "Nenhuma imagem encontrada. Tente outro assunto ou um acervo com imagens."
+                } else result.notices.firstOrNull()
+            } catch (cancelled: CancellationException) {
+                imageSearchNotice = "Busca de imagens interrompida."
+                throw cancelled
+            } catch (_: Exception) {
+                imageSearchNotice = "Não foi possível buscar imagens neste acervo."
+            } finally {
+                imageSearching = false
+            }
+        }
+    }
+
+    internal fun cancelImageSearch() { imageSearchJob?.cancel() }
+
+    internal suspend fun loadImage(image: ZimImage, maxEdge: Int) =
+        renderWikiImage(zim.readImage(image.libraryId, image.path), maxEdge)
 
     private suspend fun saveHistory() {
         if (historyUnreadable) return
@@ -358,11 +401,13 @@ class WikiViewModel(application: Application) : AndroidViewModel(application) {
         stopLan()
         val active = currentJob
         val preview = previewJob
+        val imageSearch = imageSearchJob
         val closing = lanStopJob
         CoroutineScope(Dispatchers.IO).launch {
             closing?.join()
             active?.join()
             preview?.join()
+            imageSearch?.join()
             runCatching { zim.close() }
             runCatching { model.close() }
         }
